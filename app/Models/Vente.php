@@ -8,7 +8,9 @@ class Vente extends Model
 {
     protected $fillable = [
         'produit_id', 'caissiere_id', 'quantite',
-        'prix_unitaire', 'montant_total', 'date_vente'
+        'prix_unitaire', 'prix_vendeur', 'remise',
+        'montant_total', 'date_vente', 'zone_livraison',
+        'statut', 'notes'
     ];
 
     public function produit()

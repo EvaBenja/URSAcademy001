@@ -20,21 +20,36 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('produits', ProduitController::class);
     });
 
-    // Ventes - caissiere et gestionnaire
-    Route::middleware('role:caissiere,gestionnaire,admin')->group(function () {
-        Route::get('/ventes/chiffre-affaires', [VenteController::class, 'chiffreAffaires']);
-        Route::get('/ventes/par-caissiere', [VenteController::class, 'chiffreAffairesParCaissiere']);
-        Route::apiResource('ventes', VenteController::class)->only(['index', 'store']);
+    // Produits - vendeur peut consulter
+    Route::middleware('role:vendeur,gestionnaire,admin')->group(function () {
+        Route::get('/produits-liste', [ProduitController::class, 'index']);
     });
 
-    // Livraisons - livreur peut créer, gestionnaire valide
+    // Ventes
+    Route::middleware('role:vendeur,gestionnaire,admin')->group(function () {
+        Route::get('/ventes', [VenteController::class, 'index']);
+        Route::post('/ventes', [VenteController::class, 'store']);
+        Route::get('/ventes/chiffre-affaires', [VenteController::class, 'chiffreAffaires']);
+        Route::get('/ventes/par-caissiere', [VenteController::class, 'chiffreAffairesParCaissiere']);
+        Route::get('/ventes/classement', [VenteController::class, 'classementVendeurs']);
+    });
+
+    Route::middleware('role:gestionnaire,admin')->group(function () {
+        Route::post('/ventes/{id}/valider', [VenteController::class, 'valider']);
+        Route::post('/ventes/{id}/annuler', [VenteController::class, 'annuler']);
+    });
+
+    // Livraisons
     Route::middleware('role:livreur,gestionnaire,admin')->group(function () {
         Route::apiResource('livraisons', LivraisonController::class)->only(['index', 'store', 'show']);
         Route::post('/livraisons/{id}/cloturer', [LivraisonController::class, 'cloturer']);
+        Route::post('/livraisons/{id}/accepter', [LivraisonController::class, 'accepter']);
+        Route::post('/livraisons/{id}/rejeter', [LivraisonController::class, 'rejeter']);
     });
 
     Route::middleware('role:gestionnaire,admin')->group(function () {
         Route::post('/livraisons/{id}/valider', [LivraisonController::class, 'valider']);
+        Route::post('/livraisons/{id}/assigner', [LivraisonController::class, 'assignerLivreur']);
     });
 
     // Géolocalisation
