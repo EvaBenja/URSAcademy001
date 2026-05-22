@@ -159,6 +159,20 @@ class LivraisonController extends Controller
         ]);
     }
 
+
+    // Mettre à jour le statut d'une livraison
+public function updateStatut(Request $request, $id)
+{
+    $request->validate([
+        'statut' => 'required|in:en_attente,validee,en_cours,rejetee,terminee',
+    ]);
+
+    $livraison = Livraison::findOrFail($id);
+    $livraison->update(['statut' => $request->statut]);
+
+    return response()->json($livraison->load(['livreur', 'gestionnaire']));
+}
+
     // Clôturer le dossier journalier
     public function cloturer($id)
     {

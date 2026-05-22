@@ -17,6 +17,11 @@ class CheckRole
             ], 401);
         }
 
+        // super_admin a accès à tout
+        if ($user->role->nom === 'super_admin') {
+            return $next($request);
+        }
+
         if (!in_array($user->role->nom, $roles)) {
             return response()->json([
                 'message' => 'Accès refusé - rôle insuffisant'
