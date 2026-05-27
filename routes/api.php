@@ -14,6 +14,7 @@ use App\Http\Controllers\DossierController;
 // Routes publiques
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/register', [AuthController::class, 'register']);
 
 // Routes protégées
 Route::middleware('auth:sanctum')->group(function () {

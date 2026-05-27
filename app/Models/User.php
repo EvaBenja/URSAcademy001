@@ -11,14 +11,10 @@ class User extends Authenticatable
     use HasApiTokens, Notifiable;
 
     protected $fillable = [
-    'name',
-    'email', 
-    'password',
-    'role_id',
-    'latitude',
-    'longitude',
-    'position_updated_at',
-];
+        'name', 'prenom', 'nom', 'email', 'password',
+        'role_id', 'telephone', 'statut',
+        'latitude', 'longitude', 'position_updated_at',
+    ];
 
     protected $hidden = [
         'password',
@@ -44,8 +40,8 @@ class User extends Authenticatable
         return $this->role->nom === 'livreur';
     }
 
-    public function estCaissiere()
+    public function estVendeur()
     {
-        return $this->role->nom === 'caissiere';
+        return $this->role->nom === 'vendeur';
     }
 }
