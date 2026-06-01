@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    // Connexion
     public function login(Request $request)
     {
         $request->validate([
@@ -36,22 +35,22 @@ class AuthController extends Controller
                 'email'     => $user->email,
                 'telephone' => $user->telephone,
                 'statut'    => $user->statut,
-                'role'      => $user->role->nom,
+                'role'      => $user->role?->nom,
             ]
         ]);
     }
 
-    // Déconnexion
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
+
         return response()->json(['message' => 'Déconnecté avec succès']);
     }
 
-    // Profil connecté
     public function me(Request $request)
     {
         $user = $request->user()->load('role');
+
         return response()->json([
             'user' => [
                 'id'        => $user->id,
@@ -61,47 +60,55 @@ class AuthController extends Controller
                 'email'     => $user->email,
                 'telephone' => $user->telephone,
                 'statut'    => $user->statut,
-                'role'      => $user->role->nom,
+                'role'      => $user->role?->nom,
             ]
         ]);
     }
 
-    // Inscription
-    public function register(Request $request)
-    {
-        $request->validate([
-            'prenom'    => 'required|string',
-            'nom'       => 'required|string',
-            'email'     => 'required|email|unique:users',
-            'password'  => 'required|min:6',
-            'telephone' => 'nullable|string',
-            'role_id'   => 'required|exists:roles,id',
-        ]);
+   public function register(Request $request)
+{
+    // On capture l'erreur de validation proprement pour te l'afficher
+    $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        'prenom'    => 'required|string|max:255',
+        'nom'       => 'required|string|max:255',
+        'email'     => 'required|email|unique:users,email',
+        'password'  => 'required|min:6|confirmed',
+        'telephone' => 'required|string',
+       'role_id' => 'required|exists:roles,id', // Enlevé le "exists" temporairement pour tester
+    ]);
 
-        $user = User::create([
-            'name'      => $request->prenom . ' ' . $request->nom,
-            'prenom'    => $request->prenom,
-            'nom'       => $request->nom,
-            'email'     => $request->email,
-            'password'  => Hash::make($request->password),
-            'telephone' => $request->telephone,
-            'role_id'   => $request->role_id,
-            'statut'    => 'actif',
-        ]);
-
-        $token = $user->createToken('auth_token')->plainTextToken;
-
+    if ($validator->fails()) {
+        // Renvoie le premier message d'erreur précis au frontend
         return response()->json([
-            'token' => $token,
-            'user'  => [
-                'id'        => $user->id,
-                'prenom'    => $user->prenom,
-                'nom'       => $user->nom,
-                'email'     => $user->email,
-                'telephone' => $user->telephone,
-                'statut'    => $user->statut,
-                'role'      => $user->load('role')->role->nom,
-            ]
-        ], 201);
+            'message' => $validator->errors()->first()
+        ], 422);
     }
+
+    $user = User::create([
+        'name'      => $request->prenom . ' ' . $request->nom,
+        'prenom'    => $request->prenom,
+        'nom'       => $request->nom,
+        'email'     => $request->email,
+        'password'  => Hash::make($request->password),
+        'telephone' => $request->telephone,
+        'role_id'   => $request->role_id,
+        'statut'    => 'actif',
+    ]);
+
+    $user->load('role');
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    return response()->json([
+        'token' => $token,
+        'user'  => [
+            'id'        => $user->id,
+            'prenom'    => $user->prenom,
+            'nom'       => $user->nom,
+            'email'     => $user->email,
+            'telephone' => $user->telephone,
+            'statut'    => $user->statut,
+            'role'      => $user->role?->nom,
+        ]
+    ], 201);
+}
 }

@@ -32,16 +32,16 @@ class User extends Authenticatable
 
     public function estGestionnaire()
     {
-        return $this->role->nom === 'gestionnaire';
+        return optional($this->role)->nom === 'gestionnaire';
     }
 
     public function estLivreur()
     {
-        return $this->role->nom === 'livreur';
+        return optional($this->role)->nom === 'livreur';
     }
 
     public function estVendeur()
     {
-        return $this->role->nom === 'vendeur';
+        return optional($this->role)->nom === 'vendeur';
     }
 }
