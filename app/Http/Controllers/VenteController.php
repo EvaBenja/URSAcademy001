@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use App\Models\Vente;
 use App\Models\VenteItem;
 use App\Models\Produit;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -16,10 +17,9 @@ class VenteController extends Controller
         return response()->json($ventes);
     }
 
-    // Enregistrer une vente — supporte panier multiple via 'items'
     public function store(Request $request)
     {
-        // Mode panier multiple
+        // Mode panier multiple via items[]
         if ($request->has('items') && is_array($request->items)) {
             $request->validate([
                 'items'                     => 'required|array|min:1',
@@ -34,40 +34,38 @@ class VenteController extends Controller
 
             DB::beginTransaction();
             try {
-                $montant_total_global = 0;
-                $premier_produit_id   = $request->items[0]['produit_id'];
+                $montant_total = 0;
+                $premier_produit_id = $request->items[0]['produit_id'];
                 $items_data = [];
 
                 foreach ($request->items as $item) {
                     $produit = Produit::findOrFail($item['produit_id']);
                     if ($produit->quantite_stock < $item['quantite']) {
                         DB::rollBack();
-                        return response()->json(['message' => "Stock insuffisant pour {$produit->nom}. Dispo: {$produit->quantite_stock}"], 422);
+                        return response()->json(['message' => "Stock insuffisant pour {$produit->nom}. Disponible: {$produit->quantite_stock}"], 422);
                     }
-                    $prix_vendeur = $item['prix_vendeur'] ?? $produit->prix_unitaire;
-                    $remise       = $item['remise'] ?? 0;
+                    $prix_vendeur = isset($item['prix_vendeur']) ? $item['prix_vendeur'] : $produit->prix_unitaire;
+                    $remise       = isset($item['remise']) ? $item['remise'] : 0;
                     $sous_total   = ($prix_vendeur * $item['quantite']) - $remise;
-                    $montant_total_global += $sous_total;
-                    $items_data[] = compact('produit','item','prix_vendeur','remise','sous_total');
+                    $montant_total += $sous_total;
+                    $items_data[]  = compact('produit','item','prix_vendeur','remise','sous_total');
                 }
 
-                // Créer la vente principale avec le 1er produit (compatibilité)
-                $p0 = Produit::find($premier_produit_id);
+                $p0    = Produit::find($premier_produit_id);
                 $vente = Vente::create([
                     'produit_id'     => $premier_produit_id,
                     'caissiere_id'   => $request->user()->id,
-                    'quantite'       => array_sum(array_column($request->items,'quantite')),
+                    'quantite'       => array_sum(array_column($request->items, 'quantite')),
                     'prix_unitaire'  => $p0->prix_unitaire,
                     'prix_vendeur'   => $items_data[0]['prix_vendeur'],
                     'remise'         => 0,
-                    'montant_total'  => $montant_total_global,
+                    'montant_total'  => $montant_total,
                     'date_vente'     => $request->date_vente,
                     'zone_livraison' => $request->zone_livraison,
                     'statut'         => 'en_attente',
                     'notes'          => $request->notes,
                 ]);
 
-                // Créer les items détaillés
                 foreach ($items_data as $d) {
                     VenteItem::create([
                         'vente_id'      => $vente->id,
@@ -78,7 +76,6 @@ class VenteController extends Controller
                         'remise'        => $d['remise'],
                         'sous_total'    => $d['sous_total'],
                     ]);
-                    // Décrémenter le stock
                     $d['produit']->decrement('quantite_stock', $d['item']['quantite']);
                 }
 
@@ -91,7 +88,7 @@ class VenteController extends Controller
             }
         }
 
-        // Mode classique (1 seul produit — rétrocompatibilité)
+        // Mode classique (1 produit)
         $request->validate([
             'produit_id'     => 'required|exists:produits,id',
             'quantite'       => 'required|integer|min:1',
@@ -104,18 +101,18 @@ class VenteController extends Controller
 
         $produit = Produit::findOrFail($request->produit_id);
         if ($produit->quantite_stock < $request->quantite) {
-            return response()->json(['message' => 'Stock insuffisant. Disponible : '.$produit->quantite_stock], 422);
+            return response()->json(['message' => 'Stock insuffisant. Disponible: '.$produit->quantite_stock], 422);
         }
-        $prix_unitaire = $request->prix_vendeur ?? $produit->prix_unitaire;
+        $prix_vendeur  = $request->prix_vendeur ?? $produit->prix_unitaire;
         $remise        = $request->remise ?? 0;
-        $montant_total = ($prix_unitaire * $request->quantite) - $remise;
+        $montant_total = ($prix_vendeur * $request->quantite) - $remise;
 
         $vente = Vente::create([
             'produit_id'     => $request->produit_id,
             'caissiere_id'   => $request->user()->id,
             'quantite'       => $request->quantite,
             'prix_unitaire'  => $produit->prix_unitaire,
-            'prix_vendeur'   => $prix_unitaire,
+            'prix_vendeur'   => $prix_vendeur,
             'remise'         => $remise,
             'montant_total'  => $montant_total,
             'date_vente'     => $request->date_vente,
@@ -137,8 +134,7 @@ class VenteController extends Controller
     public function annuler($id)
     {
         $vente = Vente::findOrFail($id);
-        // Remettre le stock — items détaillés ou produit principal
-        if ($vente->items->count() > 0) {
+        if ($vente->items()->count() > 0) {
             foreach ($vente->items as $item) {
                 $item->produit->increment('quantite_stock', $item->quantite);
             }
@@ -152,48 +148,59 @@ class VenteController extends Controller
     public function chiffreAffaires()
     {
         $total = Vente::where('statut', 'validee')->sum('montant_total');
-        return response()->json(['chiffre_affaires' => $total]);
+        $count = Vente::where('statut', 'validee')->count();
+        return response()->json([
+            'total_ventes'      => $total,
+            'nombre_ventes'     => $count,
+            'ventes_en_attente' => Vente::where('statut', 'en_attente')->count(),
+        ]);
+    }
+
+    // FIX: deux requêtes séparées pour éviter le bug with()+selectRaw+groupBy
+    public function classementVendeurs()
+    {
+        // Étape 1: agrégation pure sans relation
+        $aggregats = DB::table('ventes')
+            ->where('statut', 'validee')
+            ->select('caissiere_id', DB::raw('SUM(montant_total) as total'), DB::raw('COUNT(*) as nombre_ventes'))
+            ->groupBy('caissiere_id')
+            ->orderByDesc('total')
+            ->get();
+
+        // Étape 2: charger les users séparément
+        $userIds = $aggregats->pluck('caissiere_id')->toArray();
+        $users   = User::whereIn('id', $userIds)->get()->keyBy('id');
+
+        $classement = $aggregats->values()->map(function ($item, $index) use ($users) {
+            $user = $users->get($item->caissiere_id);
+            $nom  = 'Inconnu';
+            if ($user) {
+                $nom = $user->prenom ? trim($user->prenom.' '.$user->nom) : $user->name;
+            }
+            return [
+                'rang'          => $index + 1,
+                'caissiere_id'  => $item->caissiere_id,
+                'vendeur'       => $nom,
+                'total'         => (float) $item->total,
+                'nombre_ventes' => (int) $item->nombre_ventes,
+            ];
+        });
+
+        return response()->json($classement);
     }
 
     public function stats()
     {
-        return response()->json([
-            'total_ventes'     => Vente::where('statut', 'validee')->sum('montant_total'),
-            'nombre_ventes'    => Vente::where('statut', 'validee')->count(),
-            'ventes_en_attente'=> Vente::where('statut', 'en_attente')->count(),
-        ]);
-    }
-
-    // Classement — toutes les ventes validées (pas seulement aujourd'hui)
-    public function classementVendeurs()
-    {
-        $classement = Vente::with('caissiere')
-            ->where('statut', 'validee')
-            ->selectRaw('caissiere_id, SUM(montant_total) as total, COUNT(*) as nombre_ventes')
-            ->groupBy('caissiere_id')
-            ->orderByDesc('total')
-            ->get()
-            ->map(function ($item, $index) {
-                return [
-                    'rang'          => $index + 1,
-                    'caissiere_id'  => $item->caissiere_id,
-                    'vendeur'       => $item->caissiere
-                        ? ($item->caissiere->prenom
-                            ? $item->caissiere->prenom.' '.$item->caissiere->nom
-                            : $item->caissiere->name)
-                        : 'Inconnu',
-                    'total'         => $item->total,
-                    'nombre_ventes' => $item->nombre_ventes,
-                ];
-            });
-        return response()->json($classement);
+        return $this->chiffreAffaires();
     }
 
     public function chiffreAffairesParCaissiere()
     {
-        $stats = Vente::with('caissiere')->where('statut','validee')
-            ->selectRaw('caissiere_id, SUM(montant_total) as total')
-            ->groupBy('caissiere_id')->get();
+        $stats = DB::table('ventes')
+            ->where('statut', 'validee')
+            ->select('caissiere_id', DB::raw('SUM(montant_total) as total'))
+            ->groupBy('caissiere_id')
+            ->get();
         return response()->json($stats);
     }
 }
