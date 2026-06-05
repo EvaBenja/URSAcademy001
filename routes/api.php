@@ -16,7 +16,6 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 
-// Routes protégées
 Route::middleware('auth:sanctum')->group(function () {
 
     // Auth
@@ -32,13 +31,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard/demandes-recentes', [DashboardController::class, 'demandesRecentes']);
     });
 
-    // Produits
+    // Produits CRUD — gestionnaire et super_admin seulement
     Route::middleware('role:gestionnaire,admin,super_admin')->group(function () {
         Route::apiResource('produits', ProduitController::class);
     });
 
-    // Produits - vendeur peut consulter
-    Route::middleware('role:vendeur,gestionnaire,admin,super_admin')->group(function () {
+    // Produits lecture — vendeur, livreur, coordinateur peuvent consulter
+    Route::middleware('role:vendeur,livreur,coordinateur,gestionnaire,admin,super_admin')->group(function () {
         Route::get('/produits-liste', [ProduitController::class, 'index']);
     });
 
@@ -57,7 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/ventes/{id}/annuler', [VenteController::class, 'annuler']);
     });
 
-    // Livraisons
+    // Livraisons (gérées par gestionnaire/coordinateur)
     Route::middleware('role:livreur,gestionnaire,admin,super_admin,coordinateur')->group(function () {
         Route::apiResource('livraisons', LivraisonController::class)->only(['index', 'store', 'show']);
         Route::post('/livraisons/{id}/cloturer', [LivraisonController::class, 'cloturer']);
@@ -66,12 +65,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/livraisons/{id}/statut', [LivraisonController::class, 'updateStatut']);
     });
 
-    Route::middleware('role:gestionnaire,admin,super_admin')->group(function () {
+    Route::middleware('role:gestionnaire,admin,super_admin,coordinateur')->group(function () {
         Route::post('/livraisons/{id}/valider', [LivraisonController::class, 'valider']);
         Route::post('/livraisons/{id}/assigner', [LivraisonController::class, 'assignerLivreur']);
     });
 
-    // Demandes livreurs
+    // Demandes livreurs (/demandes = DemandeController)
     Route::middleware('role:livreur,gestionnaire,admin,super_admin,coordinateur')->group(function () {
         Route::get('/demandes', [DemandeController::class, 'index']);
         Route::post('/demandes', [DemandeController::class, 'store']);

@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Models\Livraison;
@@ -8,16 +7,38 @@ use Illuminate\Http\Request;
 
 class DemandeController extends Controller
 {
-    // Lister toutes les demandes
-    public function index()
+    // Lister les demandes livreurs
+    // Une demande livreur = livreur_id non null ET (gestionnaire_id null OU soumis par livreur)
+    public function index(Request $request)
     {
+        $user = $request->user();
+        $roleNom = $user->role?->nom ?? '';
+
+        // Si livreur → seulement ses propres demandes
+        if ($roleNom === 'livreur') {
+            $demandes = Livraison::with(['livreur', 'gestionnaire'])
+                ->where('livreur_id', $user->id)
+                ->orderByDesc('created_at')
+                ->get();
+            return response()->json($demandes);
+        }
+
+        // Si gestionnaire/coordinateur/admin → toutes les demandes soumises par livreurs
+        // On identifie une demande livreur par: livreur_id = l'utilisateur qui l'a créée
+        // et gestionnaire_id NULL (pas encore traitée) OU statut != terminee
         $demandes = Livraison::with(['livreur', 'gestionnaire'])
+            ->whereHas('livreur', function ($q) {
+                $q->whereHas('role', function ($r) {
+                    $r->where('nom', 'livreur');
+                });
+            })
             ->orderByDesc('created_at')
             ->get();
+
         return response()->json($demandes);
     }
 
-    // Créer une demande
+    // Livreur crée une demande
     public function store(Request $request)
     {
         $request->validate([
@@ -37,14 +58,14 @@ class DemandeController extends Controller
         return response()->json($demande->load('livreur'), 201);
     }
 
-    // Valider une demande
+    // Gestionnaire valide → crée dossier journalier
     public function valider(Request $request, $id)
     {
-        $demande = Livraison::findOrFail($id);
-
         $request->validate([
             'montant_carburant' => 'required|numeric|min:0',
         ]);
+
+        $demande = Livraison::findOrFail($id);
 
         $demande->update([
             'gestionnaire_id' => $request->user()->id,
@@ -62,7 +83,7 @@ class DemandeController extends Controller
         return response()->json($demande->load(['livreur', 'gestionnaire']));
     }
 
-    // Refuser une demande
+    // Gestionnaire refuse
     public function refuser(Request $request, $id)
     {
         $request->validate([
@@ -75,9 +96,6 @@ class DemandeController extends Controller
             'motif_rejet' => $request->motif,
         ]);
 
-        return response()->json([
-            'message' => 'Demande refusée',
-            'demande' => $demande
-        ]);
+        return response()->json(['message' => 'Demande refusée', 'demande' => $demande]);
     }
 }
