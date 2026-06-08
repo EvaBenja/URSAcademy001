@@ -60,14 +60,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/ventes/{id}/annuler', [VenteController::class, 'annuler']);
     });
 
-    // ── Demandes livreurs (/demandes = DemandeController) ──
-    Route::middleware('role:livreur,gestionnaire,coordinateur,admin,super_admin')->group(function () {
-        Route::get('/demandes',  [DemandeController::class, 'index']);
-        Route::post('/demandes', [DemandeController::class, 'store']);
-    });
-    Route::middleware('role:gestionnaire,admin,super_admin')->group(function () {
-        Route::patch('/demandes/{id}/valider', [DemandeController::class, 'valider']);
-        Route::patch('/demandes/{id}/refuser', [DemandeController::class, 'refuser']);
+    // ── Demandes livreurs — filtrage par rôle géré dans DemandeController ──
+    Route::get('/demandes',  [DemandeController::class, 'index']);
+    Route::post('/demandes', [DemandeController::class, 'store']);
+    Route::middleware('role:gestionnaire,admin,super_admin,coordinateur')->group(function () {
+        Route::patch('/demandes/{id}/valider',  [DemandeController::class, 'valider']);
+        Route::patch('/demandes/{id}/refuser',  [DemandeController::class, 'refuser']);
         Route::patch('/demandes/{id}/cloturer', [DemandeController::class, 'cloturer']);
     });
 
