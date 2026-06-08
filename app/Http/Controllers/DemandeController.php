@@ -102,4 +102,40 @@ class DemandeController extends Controller
         ]);
         return response()->json(['message' => 'Demande refusée', 'demande' => $demande]);
     }
+
+    // Gestionnaire clôture une livraison validée avec statut de chaque produit
+    public function cloturer(Request $request, $id)
+    {
+        $request->validate([
+            'produits_statuts'          => 'nullable|array',
+            'produits_statuts.*.id'     => 'required|exists:livraison_produits,id',
+            'produits_statuts.*.statut' => 'required|in:livre,non_livre',
+            'notes_cloture'             => 'nullable|string',
+        ]);
+
+        $demande = Livraison::findOrFail($id);
+        $demande->update([
+            'statut' => 'terminee',
+            'notes'  => $request->notes_cloture ?? $demande->notes,
+        ]);
+
+        // Mettre à jour le statut de chaque produit livré/non livré
+        if ($request->has('produits_statuts') && Schema::hasTable('livraison_produits')) {
+            foreach ($request->produits_statuts as $ps) {
+                \App\Models\LivraisonProduit::where('id', $ps['id'])
+                    ->update(['statut' => $ps['statut']]);
+            }
+        }
+
+        // Clôturer le dossier journalier associé
+        if ($demande->dossier) {
+            $demande->dossier->update(['statut' => 'cloture']);
+        }
+
+        return response()->json([
+            'message'  => 'Demande clôturée avec succès',
+            'demande'  => $demande->load(['livreur','gestionnaire','produits.produit']),
+        ]);
+    }
+
 }

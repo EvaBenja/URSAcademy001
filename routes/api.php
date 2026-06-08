@@ -68,6 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:gestionnaire,admin,super_admin')->group(function () {
         Route::patch('/demandes/{id}/valider', [DemandeController::class, 'valider']);
         Route::patch('/demandes/{id}/refuser', [DemandeController::class, 'refuser']);
+        Route::patch('/demandes/{id}/cloturer', [DemandeController::class, 'cloturer']);
     });
 
     // ── Livraisons (/livraisons = LivraisonController) ──
