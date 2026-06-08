@@ -161,7 +161,7 @@ class VenteController extends Controller
     {
         // Étape 1: agrégation pure sans relation
         $aggregats = DB::table('ventes')
-            ->where('statut', 'validee')
+            ->whereIn('statut', ['en_attente', 'validee'])
             ->select('caissiere_id', DB::raw('SUM(montant_total) as total'), DB::raw('COUNT(*) as nombre_ventes'))
             ->groupBy('caissiere_id')
             ->orderByDesc('total')
@@ -197,7 +197,7 @@ class VenteController extends Controller
     public function chiffreAffairesParCaissiere()
     {
         $stats = DB::table('ventes')
-            ->where('statut', 'validee')
+            ->whereIn('statut', ['en_attente', 'validee'])
             ->select('caissiere_id', DB::raw('SUM(montant_total) as total'))
             ->groupBy('caissiere_id')
             ->get();
