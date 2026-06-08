@@ -13,9 +13,9 @@ class VenteController extends Controller
 {
     public function index()
     {
-        $ventes = Vente::with(['produit','caissiere','items.produit'])
-            ->orderByDesc('created_at')
-            ->get();
+        $hasItems = \Illuminate\Support\Facades\Schema::hasTable('vente_items');
+        $with = $hasItems ? ['produit','caissiere','items.produit'] : ['produit','caissiere'];
+        $ventes = Vente::with($with)->orderByDesc('created_at')->get();
         return response()->json($ventes);
     }
 
@@ -158,7 +158,9 @@ class VenteController extends Controller
             return response()->json(['message' => 'Cette vente ne peut plus être modifiée'], 422);
         }
         $vente->update(['statut' => 'validee']);
-        return response()->json($vente->load(['produit', 'caissiere', 'items.produit']));
+        $hasItems = \Illuminate\Support\Facades\Schema::hasTable('vente_items');
+        $with = $hasItems ? ['produit','caissiere','items.produit'] : ['produit','caissiere'];
+        return response()->json($vente->load($with));
     }
 
     public function annuler($id)

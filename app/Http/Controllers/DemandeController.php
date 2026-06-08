@@ -2,49 +2,45 @@
 namespace App\Http\Controllers;
 
 use App\Models\Livraison;
+use App\Models\LivraisonProduit;
 use App\Models\DossierJournalier;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class DemandeController extends Controller
 {
-    // Lister les demandes livreurs
-    // Une demande livreur = livreur_id non null ET (gestionnaire_id null OU soumis par livreur)
     public function index(Request $request)
     {
-        $user = $request->user();
+        $user    = $request->user();
         $roleNom = $user->role?->nom ?? '';
 
-        // Si livreur → seulement ses propres demandes
         if ($roleNom === 'livreur') {
-            $demandes = Livraison::with(['livreur', 'gestionnaire'])
+            $demandes = Livraison::with(['livreur','gestionnaire','produits.produit'])
                 ->where('livreur_id', $user->id)
                 ->orderByDesc('created_at')
                 ->get();
             return response()->json($demandes);
         }
 
-        // Si gestionnaire/coordinateur/admin → toutes les demandes soumises par livreurs
-        // On identifie une demande livreur par: livreur_id = l'utilisateur qui l'a créée
-        // et gestionnaire_id NULL (pas encore traitée) OU statut != terminee
-        $demandes = Livraison::with(['livreur', 'gestionnaire'])
-            ->whereHas('livreur', function ($q) {
-                $q->whereHas('role', function ($r) {
-                    $r->where('nom', 'livreur');
-                });
-            })
+        // Gestionnaire/coordinateur voient les demandes créées par des livreurs
+        $demandes = Livraison::with(['livreur','gestionnaire','produits.produit'])
+            ->whereHas('livreur', fn($q) => $q->whereHas('role', fn($r) => $r->where('nom','livreur')))
             ->orderByDesc('created_at')
             ->get();
 
         return response()->json($demandes);
     }
 
-    // Livreur crée une demande
+    // Livreur crée une demande avec des produits à livrer
     public function store(Request $request)
     {
         $request->validate([
-            'date_livraison' => 'required|date',
-            'notes'          => 'nullable|string',
-            'zone_livraison' => 'nullable|string',
+            'date_livraison'        => 'required|date',
+            'notes'                 => 'nullable|string',
+            'zone_livraison'        => 'nullable|string',
+            'produits'              => 'nullable|array',
+            'produits.*.produit_id' => 'required_with:produits|exists:produits,id',
+            'produits.*.quantite'   => 'required_with:produits|integer|min:1',
         ]);
 
         $demande = Livraison::create([
@@ -55,14 +51,26 @@ class DemandeController extends Controller
             'zone_livraison' => $request->zone_livraison,
         ]);
 
-        return response()->json($demande->load('livreur'), 201);
+        // Associer les produits si fournis et si table existe
+        if ($request->has('produits') && is_array($request->produits) && Schema::hasTable('livraison_produits')) {
+            foreach ($request->produits as $item) {
+                LivraisonProduit::create([
+                    'livraison_id' => $demande->id,
+                    'produit_id'   => $item['produit_id'],
+                    'quantite'     => $item['quantite'],
+                ]);
+            }
+        }
+
+        return response()->json($demande->load(['livreur','produits.produit']), 201);
     }
 
     // Gestionnaire valide → crée dossier journalier
+    // montant_carburant est optionnel (défaut 0)
     public function valider(Request $request, $id)
     {
         $request->validate([
-            'montant_carburant' => 'required|numeric|min:0',
+            'montant_carburant' => 'nullable|numeric|min:0',
         ]);
 
         $demande = Livraison::findOrFail($id);
@@ -75,27 +83,23 @@ class DemandeController extends Controller
         DossierJournalier::create([
             'livreur_id'        => $demande->livreur_id,
             'livraison_id'      => $demande->id,
-            'montant_carburant' => $request->montant_carburant,
+            'montant_carburant' => $request->montant_carburant ?? 0,
             'statut'            => 'ouvert',
             'date'              => $demande->date_livraison,
         ]);
 
-        return response()->json($demande->load(['livreur', 'gestionnaire']));
+        return response()->json($demande->load(['livreur','gestionnaire']));
     }
 
-    // Gestionnaire refuse
+    // Gestionnaire refuse — motif obligatoire
     public function refuser(Request $request, $id)
     {
-        $request->validate([
-            'motif' => 'required|string',
-        ]);
-
+        $request->validate(['motif' => 'required|string']);
         $demande = Livraison::findOrFail($id);
         $demande->update([
             'statut'      => 'rejetee',
             'motif_rejet' => $request->motif,
         ]);
-
         return response()->json(['message' => 'Demande refusée', 'demande' => $demande]);
     }
 }
