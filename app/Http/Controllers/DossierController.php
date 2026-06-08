@@ -1,3 +1,4 @@
+<?php
 namespace App\Http\Controllers;
 
 use App\Models\DossierJournalier;
@@ -6,108 +7,33 @@ use Illuminate\Http\Request;
 
 class DossierController extends Controller
 {
-    // Lister tous les dossiers
-    public function index()
+    public function index(Request $request)
     {
-        $dossiers = DossierJournalier::with(['livreur', 'livraison'])
-            ->orderByDesc('date')
-            ->get();
-        return response()->json($dossiers);
+        $user    = $request->user();
+        $roleNom = $user->role?->nom ?? '';
+
+        $query = DossierJournalier::with(['livreur', 'livraison', 'gestionnaire'])
+            ->orderByDesc('date');
+
+        // Livreur ne voit que ses propres dossiers
+        if ($roleNom === 'livreur') {
+            $query->where('livreur_id', $user->id);
+        }
+
+        return response()->json($query->get());
     }
 
-    // Clôturer un dossier
     public function cloturer($id)
     {
         $dossier = DossierJournalier::findOrFail($id);
         $dossier->update(['statut' => 'cloture']);
 
-        // Mettre à jour la livraison associée
         Livraison::where('id', $dossier->livraison_id)
             ->update(['statut' => 'terminee']);
 
         return response()->json([
             'message' => 'Dossier clôturé avec succès',
-            'dossier' => $dossier
+            'dossier' => $dossier->load(['livreur', 'livraison', 'gestionnaire']),
         ]);
-    }
-}===
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\User;
-use Illuminate\Http\Request;
-
-class GeolocalisationController extends Controller
-{
-    // Livreur met à jour sa position
-    public function updatePosition(Request $request)
-    {
-        $request->validate([
-            'latitude'  => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-        ]);
-
-        $user = $request->user();
-        $user->update([
-            'latitude'             => $request->latitude,
-            'longitude'            => $request->longitude,
-            'position_updated_at'  => now(),
-        ]);
-
-        return response()->json([
-            'message'   => 'Position mise à jour',
-            'latitude'  => $user->latitude,
-            'longitude' => $user->longitude,
-            'updated_at' => $user->position_updated_at,
-        ]);
-    }
-
-    // Coordonnateur voit tous les livreurs avec leur position
-    public function livreurs()
-    {
-        $livreurs = User::whereHas('role', function ($query) {
-            $query->where('nom', 'livreur');
-        })
-        ->whereNotNull('latitude')
-        ->select('id', 'name', 'email', 'latitude', 'longitude', 'position_updated_at')
-        ->get();
-
-        return response()->json($livreurs);
-    }
-
-    // Trouver le livreur le plus proche d'un point
-    public function livreurLePlusProche(Request $request)
-    {
-        $request->validate([
-            'latitude'  => 'required|numeric',
-            'longitude' => 'required|numeric',
-        ]);
-
-        $lat = $request->latitude;
-        $lng = $request->longitude;
-
-        $livreurs = User::whereHas('role', function ($query) {
-            $query->where('nom', 'livreur');
-        })
-        ->whereNotNull('latitude')
-        ->selectRaw("
-            id, name, email, latitude, longitude, position_updated_at,
-            (6371 * acos(
-                cos(radians(?)) * cos(radians(latitude)) *
-                cos(radians(longitude) - radians(?)) +
-                sin(radians(?)) * sin(radians(latitude))
-            )) AS distance_km
-        ", [$lat, $lng, $lat])
-        ->orderBy('distance_km')
-        ->first();
-
-        if (!$livreurs) {
-            return response()->json([
-                'message' => 'Aucun livreur disponible'
-            ], 404);
-        }
-
-        return response()->json($livreurs);
     }
 }

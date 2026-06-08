@@ -37,7 +37,7 @@ class GeolocalisationController extends Controller
             $query->where('nom', 'livreur');
         })
         ->whereNotNull('latitude')
-        ->select('id', 'name', 'email', 'latitude', 'longitude', 'position_updated_at')
+        ->select('id', 'name', 'prenom', 'nom', 'email', 'telephone', 'latitude', 'longitude', 'position_updated_at')
         ->get();
 
         return response()->json($livreurs);
