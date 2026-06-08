@@ -1,6 +1,7 @@
 <?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Vente extends Model {
     protected $fillable = [
@@ -12,5 +13,13 @@ class Vente extends Model {
 
     public function produit()   { return $this->belongsTo(Produit::class); }
     public function caissiere() { return $this->belongsTo(User::class, 'caissiere_id'); }
-    public function items()     { return $this->hasMany(VenteItem::class)->with('produit'); }
+
+    public function items() {
+        // Ne charge la relation que si la table existe
+        if (Schema::hasTable('vente_items')) {
+            return $this->hasMany(VenteItem::class)->with('produit');
+        }
+        // Retourne une relation vide
+        return $this->hasMany(VenteItem::class)->whereRaw('1=0');
+    }
 }
