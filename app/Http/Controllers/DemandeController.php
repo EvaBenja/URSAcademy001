@@ -14,8 +14,11 @@ class DemandeController extends Controller
         $user    = $request->user();
         $roleNom = $user->role?->nom ?? '';
 
+        $hasProduits = \Illuminate\Support\Facades\Schema::hasTable('livraison_produits');
+        $withRelations = $hasProduits ? ['livreur','gestionnaire','produits.produit'] : ['livreur','gestionnaire'];
+
         if ($roleNom === 'livreur') {
-            $demandes = Livraison::with(['livreur','gestionnaire','produits.produit'])
+            $demandes = Livraison::with($withRelations)
                 ->where('livreur_id', $user->id)
                 ->orderByDesc('created_at')
                 ->get();
@@ -23,7 +26,7 @@ class DemandeController extends Controller
         }
 
         // Gestionnaire/coordinateur voient les demandes créées par des livreurs
-        $demandes = Livraison::with(['livreur','gestionnaire','produits.produit'])
+        $demandes = Livraison::with($withRelations)
             ->whereHas('livreur', fn($q) => $q->whereHas('role', fn($r) => $r->where('nom','livreur')))
             ->orderByDesc('created_at')
             ->get();
@@ -62,7 +65,9 @@ class DemandeController extends Controller
             }
         }
 
-        return response()->json($demande->load(['livreur','produits.produit']), 201);
+        $hasProduits = Schema::hasTable('livraison_produits');
+        $with = $hasProduits ? ['livreur','produits.produit'] : ['livreur'];
+        return response()->json($demande->load($with), 201);
     }
 
     // Gestionnaire valide → crée dossier journalier
@@ -134,7 +139,11 @@ class DemandeController extends Controller
 
         return response()->json([
             'message'  => 'Demande clôturée avec succès',
-            'demande'  => $demande->load(['livreur','gestionnaire','produits.produit']),
+            'demande'  => $demande->load(
+                Schema::hasTable('livraison_produits')
+                    ? ['livreur','gestionnaire','produits.produit']
+                    : ['livreur','gestionnaire']
+            ),
         ]);
     }
 
