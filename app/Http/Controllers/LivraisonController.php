@@ -232,9 +232,8 @@ class LivraisonController extends Controller
             'produits_statuts'          => 'nullable|array',
             'produits_statuts.*.statut' => 'required_with:produits_statuts|in:livre,non_livre',
             'notes_cloture'             => 'nullable|string',
+            'photo_recu'                => 'nullable|image|max:5120', // 5MB max
         ];
-        // On ne valide "exists" que si la table existe vraiment, pour éviter un crash
-        // si l'environnement n'a pas encore la migration livraison_produits.
         if (Schema::hasTable('livraison_produits')) {
             $validationRules['produits_statuts.*.id'] = 'required_with:produits_statuts|integer|exists:livraison_produits,id';
         }
@@ -243,10 +242,18 @@ class LivraisonController extends Controller
         try {
             $livraison = Livraison::findOrFail($id);
 
-            $livraison->update([
+            $updateData = [
                 'statut' => 'livree_attente_validation',
                 'notes'  => $request->notes_cloture ?? $livraison->notes,
-            ]);
+            ];
+
+            // Upload optionnel de la photo du reçu (notamment pour les expéditions)
+            if ($request->hasFile('photo_recu') && Schema::hasColumn('livraisons','photo_recu')) {
+                $path = $request->file('photo_recu')->store('recus', 'public');
+                $updateData['photo_recu'] = $path;
+            }
+
+            $livraison->update($updateData);
 
             if ($request->has('produits_statuts') && Schema::hasTable('livraison_produits') && Schema::hasColumn('livraison_produits','statut')) {
                 foreach ($request->produits_statuts as $ps) {

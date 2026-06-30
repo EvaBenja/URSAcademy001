@@ -6,7 +6,7 @@ class Livraison extends Model {
     protected $fillable = [
         'vente_id','livreur_id','gestionnaire_id',
         'statut','notes','date_livraison','zone_livraison','motif_rejet','motif_rejet_categorie',
-        'notif_livreur_lu',
+        'notif_livreur_lu', 'photo_recu',
         'client_nom','client_telephone','client_quartier','client_latitude','client_longitude',
         'vendeur_latitude','vendeur_longitude'
     ];
