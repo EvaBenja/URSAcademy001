@@ -6,15 +6,17 @@ use App\Models\LivraisonProduit;
 use App\Models\DossierJournalier;
 use App\Models\Produit;
 use App\Models\User;
+use App\Models\Commission;
 use App\Services\GeocodingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
+
 class LivraisonController extends Controller
 {
     public function index(Request $request)
     {
-        $hasProduits = \Illuminate\Support\Facades\Schema::hasTable('livraison_produits');
-        $hasVente    = \Illuminate\Support\Facades\Schema::hasColumn('livraisons','vente_id');
+        $hasProduits = Schema::hasTable('livraison_produits');
+        $hasVente    = Schema::hasColumn('livraisons','vente_id');
         $with = ['livreur','gestionnaire'];
         if ($hasProduits) $with[] = 'produits.produit';
         if ($hasVente)    $with[] = 'vente.caissiere';
@@ -26,19 +28,13 @@ class LivraisonController extends Controller
         $query = Livraison::with($with)->orderByDesc('created_at');
 
         if ($roleNom === 'livreur') {
-            // Livreur voit :
-            // 1. Les courses disponibles (sans livreur assigné, statut en_attente)
-            // 2. Ses propres courses (livreur_id = lui)
-            // 3. Les courses rejetées par quelqu'un d'autre (disponibles pour tous)
             $query->where(function($q) use ($user) {
                 $q->where(function($sub) {
-                    // Cours disponibles : pas de livreur assigné ET statut en_attente
                     $sub->whereNull('livreur_id')
                         ->whereIn('statut', ['en_attente', 'validee']);
                 })
-                ->orWhere('livreur_id', $user->id) // ses propres courses
+                ->orWhere('livreur_id', $user->id)
                 ->orWhere(function($sub) use ($user) {
-                    // Courses rejetées par quelqu'un d'autre — visibles par tous
                     $sub->where('statut', 'rejetee')
                         ->where('livreur_id', '!=', $user->id);
                 });
@@ -48,14 +44,13 @@ class LivraisonController extends Controller
         return response()->json($query->get());
     }
 
-    // Livreur soumet une demande avec plusieurs produits
     public function store(Request $request)
     {
         $request->validate([
-            'date_livraison'  => 'required|date',
-            'notes'           => 'nullable|string',
-            'zone_livraison'  => 'nullable|string',
-            'produits'        => 'nullable|array',
+            'date_livraison'        => 'required|date',
+            'notes'                 => 'nullable|string',
+            'zone_livraison'        => 'nullable|string',
+            'produits'              => 'nullable|array',
             'produits.*.produit_id' => 'required_with:produits|exists:produits,id',
             'produits.*.quantite'   => 'required_with:produits|integer|min:1',
         ]);
@@ -68,7 +63,6 @@ class LivraisonController extends Controller
             'zone_livraison' => $request->zone_livraison ?? null,
         ]);
 
-        // Associer les produits si fournis
         if ($request->has('produits') && is_array($request->produits)) {
             foreach ($request->produits as $item) {
                 LivraisonProduit::create([
@@ -117,12 +111,10 @@ class LivraisonController extends Controller
     {
         $livraison = Livraison::findOrFail($id);
 
-        // Vérifier que la course est encore disponible (pas déjà prise par un autre)
         if (!in_array($livraison->statut, ['en_attente', 'validee', 'rejetee'])) {
             return response()->json(['message' => 'Cette course n\'est plus disponible'], 422);
         }
 
-        // Assigner ce livreur et passer en cours
         $livraison->update([
             'livreur_id'  => $request->user()->id,
             'statut'      => 'en_cours',
@@ -143,8 +135,6 @@ class LivraisonController extends Controller
         ]);
         $livraison = Livraison::findOrFail($id);
 
-        // On garde livreur_id pour que le coordinateur voie qui a rejeté.
-        // Le statut 'rejetee' déclenche une alerte chez le coordinateur.
         $updateData = [
             'statut'      => 'rejetee',
             'motif_rejet' => $request->motif,
@@ -165,7 +155,6 @@ class LivraisonController extends Controller
         $livraison = Livraison::findOrFail($id);
         $hasCoords = Schema::hasColumn('livraisons','client_latitude');
 
-        // Choix manuel : le coordinateur a sélectionné un livreur précis
         if ($request->filled('livreur_id')) {
             $livreur = User::findOrFail($request->livreur_id);
             $livraison->update(['livreur_id' => $livreur->id, 'statut' => 'validee', 'motif_rejet' => null]);
@@ -178,7 +167,6 @@ class LivraisonController extends Controller
             ]);
         }
 
-        // Auto-assignation GPS — exclure le livreur qui a rejeté cette course
         $livreurRejeteId = ($livraison->statut === 'rejetee') ? $livraison->livreur_id : null;
 
         $query = User::whereHas('role', fn($q) => $q->where('nom','livreur'))
@@ -232,15 +220,13 @@ class LivraisonController extends Controller
         return response()->json($livraison->load(['livreur','gestionnaire']));
     }
 
-    // Étape 1 — LIVREUR : coche les produits livrés/non livrés et clôture sa course.
-    // La livraison passe en attente de validation finale du gestionnaire.
     public function cloturer(Request $request, $id)
     {
         $validationRules = [
             'produits_statuts'          => 'nullable|array',
             'produits_statuts.*.statut' => 'required_with:produits_statuts|in:livre,non_livre',
             'notes_cloture'             => 'nullable|string',
-            'photo_recu'                => 'nullable|image|max:5120', // 5MB max
+            'photo_recu'                => 'nullable|image|max:5120',
         ];
         if (Schema::hasTable('livraison_produits')) {
             $validationRules['produits_statuts.*.id'] = 'required_with:produits_statuts|integer|exists:livraison_produits,id';
@@ -255,7 +241,6 @@ class LivraisonController extends Controller
                 'notes'  => $request->notes_cloture ?? $livraison->notes,
             ];
 
-            // Upload optionnel de la photo du reçu (notamment pour les expéditions)
             if ($request->hasFile('photo_recu') && Schema::hasColumn('livraisons','photo_recu')) {
                 $path = $request->file('photo_recu')->store('recus', 'public');
                 $updateData['photo_recu'] = $path;
@@ -271,9 +256,6 @@ class LivraisonController extends Controller
                 }
             }
 
-            // Le dossier reste ouvert jusqu'à la validation finale du gestionnaire
-            // (la valeur 'cloture' n'est appliquée qu'après validerCloture())
-
             $with = Schema::hasTable('livraison_produits') ? ['livreur','gestionnaire','produits.produit'] : ['livreur','gestionnaire'];
             return response()->json([
                 'message'   => 'Course clôturée — en attente de validation du gestionnaire',
@@ -287,10 +269,9 @@ class LivraisonController extends Controller
         }
     }
 
-    // Étape 2 — GESTIONNAIRE : valide définitivement la clôture après pointage du livreur.
     public function validerCloture(Request $request, $id)
     {
-        $livraison = Livraison::findOrFail($id);
+        $livraison = Livraison::with('vente.items.produit')->findOrFail($id);
         if ($livraison->statut !== 'livree_attente_validation') {
             return response()->json(['message' => 'Cette course n\'est pas en attente de validation'], 422);
         }
@@ -300,13 +281,62 @@ class LivraisonController extends Controller
             $livraison->dossier->update(['statut' => 'cloture']);
         }
 
+        // Créer automatiquement les commissions pour chaque item de la vente
+        if ($livraison->vente) {
+            $vente     = $livraison->vente;
+            $vendeurId = $vente->caissiere_id;
+
+            if ($vente->items && $vente->items->count() > 0) {
+                foreach ($vente->items as $item) {
+                    $produit = $item->produit;
+                    if (!$produit) continue;
+
+                    $commFixe    = (float) ($produit->commission_fixe ?? 0);
+                    $commPct     = (float) ($produit->commission_pourcentage ?? 0);
+                    $montantComm = $commFixe + ($item->sous_total * $commPct / 100);
+
+                    if ($montantComm > 0) {
+                        Commission::create([
+                            'user_id'                => $vendeurId,
+                            'vente_id'               => $vente->id,
+                            'produit_id'             => $produit->id,
+                            'montant_vente'          => $item->sous_total,
+                            'commission_fixe'        => $commFixe,
+                            'commission_pourcentage' => $commPct,
+                            'montant_commission'     => $montantComm,
+                            'statut'                 => 'en_attente',
+                        ]);
+                    }
+                }
+            } else {
+                $produit = $vente->produit;
+                if ($produit) {
+                    $commFixe    = (float) ($produit->commission_fixe ?? 0);
+                    $commPct     = (float) ($produit->commission_pourcentage ?? 0);
+                    $montantComm = $commFixe + ($vente->montant_total * $commPct / 100);
+
+                    if ($montantComm > 0) {
+                        Commission::create([
+                            'user_id'                => $vendeurId,
+                            'vente_id'               => $vente->id,
+                            'produit_id'             => $produit->id,
+                            'montant_vente'          => $vente->montant_total,
+                            'commission_fixe'        => $commFixe,
+                            'commission_pourcentage' => $commPct,
+                            'montant_commission'     => $montantComm,
+                            'statut'                 => 'en_attente',
+                        ]);
+                    }
+                }
+            }
+        }
+
         return response()->json([
             'message'   => 'Clôture validée définitivement',
             'livraison' => $livraison->load(['livreur','gestionnaire']),
         ]);
     }
 
-    // Étape 2 (bis) — GESTIONNAIRE : refuse la clôture avec motif obligatoire (litige, erreur de pointage, etc.)
     public function refuserCloture(Request $request, $id)
     {
         $request->validate(['motif' => 'required|string|min:3']);
@@ -317,7 +347,7 @@ class LivraisonController extends Controller
         }
 
         $livraison->update([
-            'statut'      => 'en_cours', // retour chez le livreur pour correction
+            'statut'      => 'en_cours',
             'motif_rejet' => $request->motif,
         ]);
 
@@ -327,7 +357,6 @@ class LivraisonController extends Controller
         ]);
     }
 
-    // Marquer la notification d'assignation comme lue par le livreur
     public function marquerNotifLue(Request $request, $id)
     {
         $livraison = Livraison::findOrFail($id);
@@ -337,21 +366,16 @@ class LivraisonController extends Controller
         return response()->json(['message' => 'Notification marquée comme lue']);
     }
 
-    // Vendeur confirme que le livreur est arrivé et lui a remis la marchandise
     public function confirmerRemise(Request $request, $id)
     {
         $livraison = Livraison::findOrFail($id);
         if ($livraison->statut !== 'en_cours') {
             return response()->json(['message' => "La livraison n'est pas en cours"], 422);
         }
-        // On note la confirmation vendeur mais le statut reste en_cours
-        // (le livreur clôture de son côté avec les produits livrés/non livrés)
         $livraison->update(['notes' => ($livraison->notes ? $livraison->notes.PHP_EOL : '').'[Remise confirmée par le vendeur]']);
         return response()->json(['message' => 'Remise confirmée — le livreur peut finaliser la livraison']);
     }
 
-
-    // Coordinateur retire le livreur d'une course assignée (statut validee -> en_attente)
     public function retirerLivreur(Request $request, $id)
     {
         $livraison = Livraison::findOrFail($id);
@@ -371,5 +395,4 @@ class LivraisonController extends Controller
             'livraison' => $livraison->load('livreur'),
         ]);
     }
-
 }

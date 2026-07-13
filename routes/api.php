@@ -13,6 +13,8 @@ use App\Http\Controllers\DossierController;
 use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\ComptabiliteController;
 use App\Http\Controllers\ConfigurationController;
+use App\Http\Controllers\RetraitController;
+use App\Http\Controllers\CommissionController;
 
 // ── Publiques ────────────────────────────────────────────────
 Route::post('/login',         [AuthController::class, 'login']);
@@ -29,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout',[AuthController::class, 'logout']);
     Route::get('/me',          [AuthController::class, 'me']);
     Route::get('/auth/me',     [AuthController::class, 'me']);
+
     // Configuration
     Route::get('/configuration',          [ConfigurationController::class, 'index']);
     Route::get('/configuration/{cle}',    [ConfigurationController::class, 'show']);
@@ -97,6 +100,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/depenses/{id}',               [DepenseController::class, 'update']);
     Route::delete('/depenses/{id}',            [DepenseController::class, 'destroy']);
     Route::get('/depenses/stats',              [DepenseController::class, 'stats']);
+
+    // Retraits
+    Route::get('/retraits',                [RetraitController::class, 'index']);
+    Route::post('/retraits',               [RetraitController::class, 'store']);
+    Route::get('/retraits/stats',          [RetraitController::class, 'stats']);
+    Route::post('/retraits/{id}/approuver',[RetraitController::class, 'approuver']);
+    Route::post('/retraits/{id}/refuser',  [RetraitController::class, 'refuser']);
+    Route::post('/retraits/{id}/payer',    [RetraitController::class, 'payer']);
+
+    // Commissions
+    Route::get('/commissions',                [CommissionController::class, 'index']);
+    Route::get('/commissions/stats',          [CommissionController::class, 'stats']);
+    Route::post('/commissions/{id}/valider',  [CommissionController::class, 'valider']);
+    Route::post('/commissions/{id}/payer',    [CommissionController::class, 'payer']);
 
     // Comptabilité
     Route::get('/comptabilite/journalier',     [ComptabiliteController::class, 'journalier']);
