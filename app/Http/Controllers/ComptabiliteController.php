@@ -97,4 +97,74 @@ class ComptabiliteController extends Controller
             'par_vendeur' => $parVendeur,
         ]);
     }
-}
+
+    // Retourne le journal complet — tous les jours avec données
+    public function journal(Request $request)
+    {
+        $depuis = $request->query('depuis', null);
+
+        $query = Vente::with(['items.produit', 'caissiere', 'livraison'])
+            ->where('statut', '!=', 'annulee')
+            ->orderBy('date_vente', 'desc')
+            ->orderBy('created_at', 'desc');
+
+        if ($depuis) {
+            $query->whereDate('date_vente', '>=', $depuis);
+        }
+
+        $ventes = $query->get();
+
+        // Grouper par date
+        $parJour = $ventes->groupBy(fn($v) => $v->date_vente);
+
+        $jours = $parJour->map(function ($ventesJour, $date) {
+            $parVendeur = $ventesJour->groupBy('caissiere_id')->map(function ($ventesV) {
+                $vendeur = $ventesV->first()->caissiere;
+                $caReel = 0; $caSoumis = 0; $totalRemises = 0;
+
+                $ventesDetail = $ventesV->map(function ($vente) use (&$caReel, &$caSoumis, &$totalRemises) {
+                    $statutLiv = $vente->livraison->statut ?? 'sans_livraison';
+                    $montant = (float) $vente->montant_total;
+                    $remise  = (float) ($vente->items->sum('remise') ?: $vente->remise);
+                    $caSoumis += $montant;
+                    $totalRemises += $remise;
+                    if ($statutLiv === 'terminee') $caReel += $montant;
+
+                    $produits = $vente->items->isNotEmpty()
+                        ? $vente->items->map(fn($i) => [
+                            'nom' => $i->produit->nom ?? 'Produit supprimé',
+                            'couleur' => $i->couleur,
+                            'quantite' => $i->quantite,
+                            'prix' => (float) $i->prix_vendeur,
+                            'remise' => (float) $i->remise,
+                            'sous_total' => (float) $i->sous_total,
+                        ])->values()
+                        : collect([['nom' => $vente->produit->nom ?? '—', 'couleur' => null, 'quantite' => $vente->quantite, 'prix' => (float) $vente->prix_vendeur, 'remise' => (float) $vente->remise, 'sous_total' => (float) $vente->montant_total]]);
+
+                    return [
+                        'id' => $vente->id, 'heure' => $vente->created_at->format('H:i'),
+                        'statut_liv' => $statutLiv, 'montant' => $montant,
+                        'total_remises' => $remise, 'produits' => $produits,
+                    ];
+                })->values();
+
+                return [
+                    'vendeur' => $vendeur->name ?? trim(($vendeur->prenom ?? '').' '.($vendeur->nom ?? '')) ?: 'Inconnu',
+                    'telephone' => $vendeur->telephone ?? '—',
+                    'ca_reel' => $caReel, 'ca_soumis' => $caSoumis,
+                    'nb_ventes' => $ventesDetail->count(),
+                    'total_remises' => $totalRemises, 'ventes' => $ventesDetail,
+                ];
+            })->values();
+
+            return [
+                'date'        => $date,
+                'ca_reel'     => $parVendeur->sum('ca_reel'),
+                'ca_soumis'   => $parVendeur->sum('ca_soumis'),
+                'nb_ventes'   => $ventesJour->count(),
+                'par_vendeur' => $parVendeur,
+            ];
+        })->values();
+
+        return response()->json(['jours' => $jours]);
+    }
