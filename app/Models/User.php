@@ -11,7 +11,7 @@ class User extends Authenticatable
     use HasApiTokens, Notifiable;
 
     protected $fillable = [
-        'name', 'prenom', 'nom', 'email', 'password',
+        'boutique_id','name', 'prenom', 'nom', 'email', 'password',
         'role_id', 'telephone', 'statut',
         'latitude', 'longitude', 'position_updated_at',
     ];
@@ -43,5 +43,9 @@ class User extends Authenticatable
     public function estVendeur()
     {
         return optional($this->role)->nom === 'vendeur';
+    }
+    public function boutique()
+    {
+        return $this->belongsTo(Boutique::class);
     }
 }

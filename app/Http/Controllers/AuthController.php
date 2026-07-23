@@ -15,7 +15,7 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $user = User::with('role')->where('email', $request->email)->first();
+        $user = User::with(['role', 'boutique'])->where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
@@ -36,6 +36,12 @@ class AuthController extends Controller
                 'telephone' => $user->telephone,
                 'statut'    => $user->statut,
                 'role'      => $user->role?->nom,
+                'boutique_id' => $user->boutique_id,
+                'boutique'    => $user->boutique ? [
+                    'id'   => $user->boutique->id,
+                    'nom'  => $user->boutique->nom,
+                    'pays' => $user->boutique->pays,
+                ] : null,
             ]
         ]);
     }
@@ -49,7 +55,7 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user()->load('role');
+        $user = $request->user()->load(['role', 'boutique']);
 
         return response()->json([
             'user' => [
@@ -61,6 +67,12 @@ class AuthController extends Controller
                 'telephone' => $user->telephone,
                 'statut'    => $user->statut,
                 'role'      => $user->role?->nom,
+                'boutique_id' => $user->boutique_id,
+                'boutique'    => $user->boutique ? [
+                    'id'   => $user->boutique->id,
+                    'nom'  => $user->boutique->nom,
+                    'pays' => $user->boutique->pays,
+                ] : null,
             ]
         ]);
     }
@@ -84,15 +96,16 @@ class AuthController extends Controller
         ], 422);
     }
 
-    $user = User::create([
-        'name'      => $request->prenom . ' ' . $request->nom,
-        'prenom'    => $request->prenom,
-        'nom'       => $request->nom,
-        'email'     => $request->email,
-        'password'  => Hash::make($request->password),
-        'telephone' => $request->telephone,
-        'role_id'   => $request->role_id,
-        'statut'    => 'actif',
+        $user = User::create([
+        'name'        => $request->prenom . ' ' . $request->nom,
+        'prenom'      => $request->prenom,
+        'nom'         => $request->nom,
+        'email'       => $request->email,
+        'password'    => Hash::make($request->password),
+        'telephone'   => $request->telephone,
+        'role_id'     => $request->role_id,
+        'boutique_id' => $request->boutique_id ?? \App\Models\Boutique::first()->id,
+        'statut'      => 'actif',
     ]);
 
     $user->load('role');

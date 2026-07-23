@@ -15,6 +15,7 @@ use App\Http\Controllers\ComptabiliteController;
 use App\Http\Controllers\ConfigurationController;
 use App\Http\Controllers\RetraitController;
 use App\Http\Controllers\CommissionController;
+use App\Http\Controllers\BoutiqueController;
 
 // ── Publiques ────────────────────────────────────────────────
 Route::post('/login',         [AuthController::class, 'login']);
@@ -118,6 +119,18 @@ Route::middleware('auth:sanctum')->group(function () {
     // Comptabilité
     Route::get('/comptabilite/journalier',     [ComptabiliteController::class, 'journalier']);
     Route::get('/comptabilite/journal',        [ComptabiliteController::class, 'journal']);
+
+    // Boutiques
+    Route::get('/boutiques',                      [BoutiqueController::class, 'index']);
+    Route::post('/boutiques',                     [BoutiqueController::class, 'store']);
+    Route::get('/boutiques/mes-boutiques',        [BoutiqueController::class, 'mesBoutiques']);
+    Route::get('/boutiques/{id}',                 [BoutiqueController::class, 'show']);
+    Route::put('/boutiques/{id}',                 [BoutiqueController::class, 'update']);
+    Route::delete('/boutiques/{id}',              [BoutiqueController::class, 'destroy']);
+    Route::get('/boutiques/{id}/stats',           [BoutiqueController::class, 'stats']);
+    Route::post('/boutiques/{id}/regenerer-code', [BoutiqueController::class, 'regenererCode']);
+    Route::post('/boutiques/rejoindre',           [BoutiqueController::class, 'rejoindre']);
+    Route::post('/boutiques/switcher',            [BoutiqueController::class, 'switcher']);
 
     // Utilisateurs & Rôles
     Route::get('/utilisateurs',                [UtilisateurController::class, 'index']);
