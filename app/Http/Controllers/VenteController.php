@@ -238,6 +238,95 @@ class VenteController extends Controller
     }
 
     // Suppression définitive par super_admin — aucune restriction de statut
+    // Export CSV des ventes (compatible Excel)
+    public function exportCsv(Request $request)
+    {
+        $dateDebut = $request->query('date_debut');
+        $dateFin   = $request->query('date_fin');
+        $statut    = $request->query('statut');
+
+        $with = ['produit','caissiere','items.produit','livraison.livreur'];
+
+        $query = Vente::with($with)->orderBy('date_vente','desc')->orderBy('created_at','desc');
+
+        if ($dateDebut) $query->whereDate('date_vente', '>=', $dateDebut);
+        if ($dateFin)   $query->whereDate('date_vente', '<=', $dateFin);
+        if ($statut && $statut !== 'tous') $query->where('statut', $statut);
+
+        $ventes = $query->get();
+
+        $filename = 'ventes_urs_'.now()->format('Y-m-d').'.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache',
+        ];
+
+        $callback = function() use ($ventes) {
+            $fp = fopen('php://output', 'w');
+            // BOM UTF-8 pour Excel
+            fwrite($fp, "\xEF\xBB\xBF");
+
+            // En-têtes colonnes
+            fputcsv($fp, [
+                'ID','Date','Heure','Vendeur','Client','Zone','Téléphone client',
+                'Produits','Montant total','Remise','Statut vente',
+                'Livreur','Statut livraison','Note urgence','Expédition'
+            ], ';');
+
+            foreach ($ventes as $v) {
+                $vendeur = $v->caissiere
+                    ? trim(($v->caissiere->prenom ?? '').' '.($v->caissiere->nom ?? '')) ?: $v->caissiere->name
+                    : '—';
+
+                $livreur = $v->livraison?->livreur
+                    ? trim(($v->livraison->livreur->prenom ?? '').' '.($v->livraison->livreur->nom ?? '')) ?: $v->livraison->livreur->name
+                    : '—';
+
+                $produits = $v->items->isNotEmpty()
+                    ? $v->items->map(fn($i) => ($i->produit->nom ?? '?').' x'.($i->quantite ?? 1).' ('.number_format($i->sous_total ?? 0, 0, ',', ' ').' FCFA)')->implode(' | ')
+                    : (($v->produit->nom ?? '?').' x'.($v->quantite ?? 1));
+
+                fputcsv($fp, [
+                    $v->id,
+                    $v->date_vente,
+                    $v->created_at->format('H:i'),
+                    $vendeur,
+                    $v->client_nom ?? '—',
+                    $v->zone_livraison ?? $v->livraison?->zone_livraison ?? '—',
+                    $v->client_telephone ?? '—',
+                    $produits,
+                    number_format($v->montant_total, 0, ',', ' '),
+                    number_format($v->items->sum('remise') ?: ($v->remise ?? 0), 0, ',', ' '),
+                    $v->statut,
+                    $livreur,
+                    $v->livraison?->statut ?? '—',
+                    $v->note_urgence ?? '—',
+                    $v->est_expedition ? 'Oui' : 'Non',
+                ], ';');
+            }
+            fclose($fp);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    // Purger les ventes terminées (admin seulement)
+    public function purger(Request $request)
+    {
+        $dateAvant = $request->query('date_avant');
+        if (!$dateAvant) return response()->json(['message' => 'date_avant requis'], 422);
+
+        $query = Vente::whereHas('livraison', fn($q) => $q->where('statut','terminee'))
+            ->whereDate('date_vente', '<', $dateAvant);
+
+        $nb = $query->count();
+        $query->delete();
+
+        return response()->json(['message' => "{$nb} ventes supprimées", 'nb' => $nb]);
+    }
+
     public function supprimer(Request $request, $id)
     {
         $vente = Vente::with(['livraison','items'])->findOrFail($id);
