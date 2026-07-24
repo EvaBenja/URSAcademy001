@@ -168,3 +168,4 @@ class ComptabiliteController extends Controller
 
         return response()->json(['jours' => $jours]);
     }
+}
