@@ -106,6 +106,25 @@ class VenteController extends Controller
                         'couleur'       => $d['item']['couleur'] ?? null,
                     ]);
                     $d['p']->decrement('quantite_stock', $d['item']['quantite']);
+
+                    // ── Générer la commission pour ce produit ──
+                    if (Schema::hasTable('commissions')) {
+                        $commFix  = (float)($d['p']->commission_fixe ?? 0);
+                        $commPct  = (float)($d['p']->commission_pourcentage ?? 0);
+                        $montantComm = $commFix + ($d['sous_total'] * $commPct / 100);
+                        if ($montantComm > 0) {
+                            \App\Models\Commission::create([
+                                'user_id'                => $vente->caissiere_id,
+                                'vente_id'               => $vente->id,
+                                'produit_id'             => $d['p']->id,
+                                'montant_vente'          => $d['sous_total'],
+                                'commission_fixe'        => $commFix,
+                                'commission_pourcentage' => $commPct,
+                                'montant_commission'     => $montantComm,
+                                'statut'                 => 'en_attente',
+                            ]);
+                        }
+                    }
                 }
             }
 
