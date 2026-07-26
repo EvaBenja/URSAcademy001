@@ -23,6 +23,10 @@ Route::post('/auth/login',    [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::get('/roles-public',   [UtilisateurController::class, 'rolesPublic']);
 
+// ── Routes publiques catalogue (sans authentification) ──────────────────────
+Route::get('/catalogue/{code}',          [BoutiqueController::class, 'cataloguePublic']);
+Route::post('/catalogue/{code}/commande', [BoutiqueController::class, 'commandePublique']);
+
 // ── Toutes les routes protégées par auth:sanctum uniquement ──
 // Les contrôleurs gèrent eux-mêmes les autorisations par rôle
 Route::middleware('auth:sanctum')->group(function () {

@@ -164,6 +164,134 @@ class BoutiqueController extends Controller
         ]);
     }
 
+    // ── Catalogue public — accessible sans authentification ──
+    public function cataloguePublic($code)
+    {
+        $boutique = Boutique::where('code_invitation', $code)
+            ->where('actif', true)
+            ->first();
+
+        if (!$boutique) {
+            return response()->json(['message' => 'Boutique introuvable ou inactive'], 404);
+        }
+
+        $produits = \App\Models\Produit::where('boutique_id', $boutique->id)
+            ->where('actif', true)
+            ->orderBy('nom')
+            ->get(['id','nom','reference','prix_unitaire','prix_gros','quantite_stock','unite','image']);
+
+        return response()->json([
+            'boutique' => [
+                'id'        => $boutique->id,
+                'nom'       => $boutique->nom,
+                'ville'     => $boutique->ville,
+                'pays'      => $boutique->pays,
+                'telephone' => $boutique->telephone,
+                'email'     => $boutique->email,
+                'logo'      => $boutique->logo,
+            ],
+            'produits' => $produits,
+        ]);
+    }
+
+    // ── Commande publique — le client passe une commande depuis le catalogue ──
+    public function commandePublique(Request $request, $code)
+    {
+        $boutique = Boutique::where('code_invitation', $code)
+            ->where('actif', true)
+            ->firstOrFail();
+
+        $request->validate([
+            'client_nom'       => 'required|string|max:100',
+            'client_telephone' => 'required|string|max:20',
+            'client_quartier'  => 'nullable|string|max:100',
+            'lien_localisation'=> 'nullable|string',
+            'note_urgence'     => 'nullable|string',
+            'items'            => 'required|array|min:1',
+            'items.*.produit_id' => 'required|exists:produits,id',
+            'items.*.quantite'   => 'required|integer|min:1',
+        ]);
+
+        // Créer la vente avec un caissiere_id fictif ou le premier vendeur de la boutique
+        $vendeur = \App\Models\User::whereHas('role', fn($q)=>$q->where('nom','vendeur'))
+            ->where('boutique_id', $boutique->id)
+            ->first();
+
+        if (!$vendeur) {
+            return response()->json(['message' => 'Aucun vendeur disponible dans cette boutique'], 422);
+        }
+
+        // Calculer les items et montant
+        $montant_total = 0;
+        $items_data = [];
+        foreach ($request->items as $item) {
+            $produit = \App\Models\Produit::find($item['produit_id']);
+            if (!$produit) continue;
+            $sous_total = $produit->prix_unitaire * $item['quantite'];
+            $montant_total += $sous_total;
+            $items_data[] = [
+                'produit_id'    => $produit->id,
+                'quantite'      => $item['quantite'],
+                'prix_unitaire' => $produit->prix_unitaire,
+                'prix_vendeur'  => $produit->prix_unitaire,
+                'remise'        => 0,
+                'sous_total'    => $sous_total,
+            ];
+        }
+
+        // Extraire coordonnées du lien si fourni
+        $lat = null; $lng = null;
+        if ($request->lien_localisation) {
+            preg_match('/@(-?\d+\.\d+),(-?\d+\.\d+)/', $request->lien_localisation, $m);
+            if (count($m) >= 3) { $lat = $m[1]; $lng = $m[2]; }
+            preg_match('/\?q=(-?\d+\.\d+),(-?\d+\.\d+)/', $request->lien_localisation, $m2);
+            if (count($m2) >= 3) { $lat = $m2[1]; $lng = $m2[2]; }
+        }
+
+        $vente = \App\Models\Vente::create([
+            'caissiere_id'      => $vendeur->id,
+            'boutique_id'       => $boutique->id,
+            'produit_id'        => $items_data[0]['produit_id'] ?? null,
+            'client_nom'        => $request->client_nom,
+            'client_telephone'  => $request->client_telephone,
+            'client_quartier'   => $request->client_quartier,
+            'note_urgence'      => $request->note_urgence,
+            'montant_total'     => $montant_total,
+            'statut'            => 'en_attente',
+            'date_vente'        => now()->toDateString(),
+            'vendeur_latitude'  => $lat,
+            'vendeur_longitude' => $lng,
+            'source'            => 'catalogue_public',
+        ]);
+
+        // Créer les items
+        if (\Illuminate\Support\Facades\Schema::hasTable('vente_items')) {
+            foreach ($items_data as $d) {
+                \App\Models\VenteItem::create(array_merge($d, ['vente_id' => $vente->id]));
+                \App\Models\Produit::find($d['produit_id'])?->decrement('quantite_stock', $d['quantite']);
+            }
+        }
+
+        // Créer une livraison en attente
+        \App\Models\Livraison::create([
+            'vente_id'          => $vente->id,
+            'boutique_id'       => $boutique->id,
+            'statut'            => 'en_attente',
+            'client_nom'        => $request->client_nom,
+            'client_telephone'  => $request->client_telephone,
+            'client_quartier'   => $request->client_quartier,
+            'vendeur_latitude'  => $lat,
+            'vendeur_longitude' => $lng,
+            'date_livraison'    => now()->toDateString(),
+        ]);
+
+        return response()->json([
+            'message'  => 'Commande enregistrée ! Un livreur vous contactera bientôt.',
+            'vente_id' => $vente->id,
+            'montant'  => $montant_total,
+        ], 201);
+    }
+
     // Lister les boutiques auxquelles l'utilisateur a accès
     public function mesBoutiques(Request $request)
     {
