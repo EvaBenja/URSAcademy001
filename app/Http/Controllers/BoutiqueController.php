@@ -175,10 +175,25 @@ class BoutiqueController extends Controller
             return response()->json(['message' => 'Boutique introuvable ou inactive'], 404);
         }
 
-        $produits = \App\Models\Produit::where('boutique_id', $boutique->id)
-            ->where('actif', true)
-            ->orderBy('nom')
-            ->get(['id','nom','reference','prix_unitaire','prix_gros','quantite_stock','unite','image']);
+        // Chercher les produits de cette boutique
+        // Si boutique_id n'existe pas encore sur la table produits, retourner tous les produits actifs
+        $query = \App\Models\Produit::orderBy('nom');
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('produits', 'boutique_id')) {
+            // Si les produits ont un boutique_id, filtrer — sinon retourner tous
+            $count = \App\Models\Produit::where('boutique_id', $boutique->id)->count();
+            if ($count > 0) {
+                $query->where('boutique_id', $boutique->id);
+            }
+            // else: pas de produits associés encore, on retourne tous les produits
+        }
+
+        // Filtrer les produits actifs si le champ existe
+        if (\Illuminate\Support\Facades\Schema::hasColumn('produits', 'actif')) {
+            $query->where('actif', true);
+        }
+
+        $produits = $query->get(['id','nom','reference','prix_unitaire','prix_gros','quantite_stock','unite']);
 
         return response()->json([
             'boutique' => [
