@@ -271,6 +271,12 @@ class LivraisonController extends Controller
 
     public function validerCloture(Request $request, $id)
     {
+        // Seuls le comptable et le super_admin peuvent valider les clôtures
+        $roleNom = $request->user()?->role?->nom;
+        if (!in_array($roleNom, ['compta', 'super_admin'])) {
+            return response()->json(['message' => 'Accès refusé — seul le comptable peut valider les clôtures'], 403);
+        }
+
         $livraison = Livraison::with('vente.items.produit')->findOrFail($id);
         if ($livraison->statut !== 'livree_attente_validation') {
             return response()->json(['message' => 'Cette course n\'est pas en attente de validation'], 422);
@@ -339,6 +345,11 @@ class LivraisonController extends Controller
 
     public function refuserCloture(Request $request, $id)
     {
+        $roleNom = $request->user()?->role?->nom;
+        if (!in_array($roleNom, ['compta', 'super_admin'])) {
+            return response()->json(['message' => 'Accès refusé — seul le comptable peut refuser les clôtures'], 403);
+        }
+
         $request->validate(['motif' => 'required|string|min:3']);
 
         $livraison = Livraison::findOrFail($id);
