@@ -287,54 +287,15 @@ class LivraisonController extends Controller
             $livraison->dossier->update(['statut' => 'cloture']);
         }
 
-        // Créer automatiquement les commissions pour chaque item de la vente
+        // Mettre à jour le statut de la vente → terminee
         if ($livraison->vente) {
-            $vente     = $livraison->vente;
-            $vendeurId = $vente->caissiere_id;
+            $livraison->vente->update(['statut' => 'terminee']);
 
-            if ($vente->items && $vente->items->count() > 0) {
-                foreach ($vente->items as $item) {
-                    $produit = $item->produit;
-                    if (!$produit) continue;
-
-                    $commFixe    = (float) ($produit->commission_fixe ?? 0);
-                    $commPct     = (float) ($produit->commission_pourcentage ?? 0);
-                    $montantComm = $commFixe + ($item->sous_total * $commPct / 100);
-
-                    if ($montantComm > 0) {
-                        Commission::create([
-                            'user_id'                => $vendeurId,
-                            'vente_id'               => $vente->id,
-                            'produit_id'             => $produit->id,
-                            'montant_vente'          => $item->sous_total,
-                            'commission_fixe'        => $commFixe,
-                            'commission_pourcentage' => $commPct,
-                            'montant_commission'     => $montantComm,
-                            'statut'                 => 'en_attente',
-                        ]);
-                    }
-                }
-            } else {
-                $produit = $vente->produit;
-                if ($produit) {
-                    $commFixe    = (float) ($produit->commission_fixe ?? 0);
-                    $commPct     = (float) ($produit->commission_pourcentage ?? 0);
-                    $montantComm = $commFixe + ($vente->montant_total * $commPct / 100);
-
-                    if ($montantComm > 0) {
-                        Commission::create([
-                            'user_id'                => $vendeurId,
-                            'vente_id'               => $vente->id,
-                            'produit_id'             => $produit->id,
-                            'montant_vente'          => $vente->montant_total,
-                            'commission_fixe'        => $commFixe,
-                            'commission_pourcentage' => $commPct,
-                            'montant_commission'     => $montantComm,
-                            'statut'                 => 'en_attente',
-                        ]);
-                    }
-                }
-            }
+            // Valider les commissions déjà créées à la soumission (statut validee → payable)
+            // Ne PAS recréer de nouvelles commissions ici pour éviter les doublons
+            Commission::where('vente_id', $livraison->vente->id)
+                ->where('statut', 'en_attente')
+                ->update(['statut' => 'validee']);
         }
 
         return response()->json([
