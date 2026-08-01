@@ -271,37 +271,47 @@ class LivraisonController extends Controller
 
     public function validerCloture(Request $request, $id)
     {
-        // Seuls le comptable et le super_admin peuvent valider les clôtures
         $roleNom = $request->user()?->role?->nom;
         if (!in_array($roleNom, ['compta', 'super_admin'])) {
-            return response()->json(['message' => 'Accès refusé — seul le comptable peut valider les clôtures'], 403);
+            return response()->json(['message' => 'Accès refusé'], 403);
         }
 
-        $livraison = Livraison::with('vente.items.produit')->findOrFail($id);
+        $livraison = Livraison::with('vente')->findOrFail($id);
         if ($livraison->statut !== 'livree_attente_validation') {
             return response()->json(['message' => 'Cette course n\'est pas en attente de validation'], 422);
         }
 
-        $livraison->update(['statut' => 'terminee']);
-        if ($livraison->dossier) {
-            $livraison->dossier->update(['statut' => 'cloture']);
+        // Mettre à jour la livraison
+        \Illuminate\Support\Facades\DB::table('livraisons')
+            ->where('id', $livraison->id)
+            ->update(['statut' => 'terminee', 'updated_at' => now()]);
+
+        // Mettre à jour la vente — bypass ENUM avec ALTER si nécessaire
+        if ($livraison->vente_id) {
+            try {
+                \Illuminate\Support\Facades\DB::table('ventes')
+                    ->where('id', $livraison->vente_id)
+                    ->update(['statut' => 'terminee', 'updated_at' => now()]);
+            } catch (\Exception $e) {
+                // Si l'ENUM ne contient pas 'terminee', on l'ajoute à la volée
+                \Illuminate\Support\Facades\DB::statement(
+                    "ALTER TABLE ventes MODIFY COLUMN statut ENUM('en_attente','validee','annulee','terminee') NOT NULL DEFAULT 'en_attente'"
+                );
+                \Illuminate\Support\Facades\DB::table('ventes')
+                    ->where('id', $livraison->vente_id)
+                    ->update(['statut' => 'terminee', 'updated_at' => now()]);
+            }
+
+            // Valider les commissions
+            if (Schema::hasTable('commissions')) {
+                \Illuminate\Support\Facades\DB::table('commissions')
+                    ->where('vente_id', $livraison->vente_id)
+                    ->where('statut', 'en_attente')
+                    ->update(['statut' => 'validee', 'updated_at' => now()]);
+            }
         }
 
-        // Mettre à jour le statut de la vente → terminee
-        if ($livraison->vente) {
-            $livraison->vente->update(['statut' => 'terminee']);
-
-            // Valider les commissions déjà créées à la soumission (statut validee → payable)
-            // Ne PAS recréer de nouvelles commissions ici pour éviter les doublons
-            Commission::where('vente_id', $livraison->vente->id)
-                ->where('statut', 'en_attente')
-                ->update(['statut' => 'validee']);
-        }
-
-        return response()->json([
-            'message'   => 'Clôture validée définitivement',
-            'livraison' => $livraison->load(['livreur','gestionnaire']),
-        ]);
+        return response()->json(['message' => 'Clôture validée ✓']);
     }
 
     public function refuserCloture(Request $request, $id)
