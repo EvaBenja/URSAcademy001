@@ -36,6 +36,19 @@ class RetraitController extends Controller
             'notes'          => 'nullable|string',
         ]);
 
+        // Vérifier que le vendeur a assez de commissions disponibles
+        if (\Illuminate\Support\Facades\Schema::hasTable('commissions')) {
+            $solde = \App\Models\Commission::where('user_id', $request->user()->id)
+                ->where('statut', 'validee')
+                ->sum('montant_commission');
+
+            if ((float)$request->montant > (float)$solde) {
+                return response()->json([
+                    'message' => "Solde insuffisant. Votre solde disponible est de " . number_format($solde, 0, ',', ' ') . " FCFA."
+                ], 422);
+            }
+        }
+
         $retrait = Retrait::create([
             'user_id'       => $request->user()->id,
             'montant'       => $request->montant,
@@ -80,7 +93,7 @@ class RetraitController extends Controller
         return response()->json($retrait->load(['user', 'traitePar']));
     }
 
-    // Marquer comme payé
+    // Marquer comme payé — déduit du solde commission du vendeur
     public function payer(Request $request, $id)
     {
         $retrait = Retrait::findOrFail($id);
@@ -90,6 +103,22 @@ class RetraitController extends Controller
             'traite_par' => $request->user()->id,
             'traite_le'  => now(),
         ]);
+
+        // Marquer les commissions du vendeur comme payées à hauteur du montant retiré
+        if (\Illuminate\Support\Facades\Schema::hasTable('commissions')) {
+            $montantRestant = (float) $retrait->montant;
+
+            $commissions = \App\Models\Commission::where('user_id', $retrait->user_id)
+                ->where('statut', 'validee')
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            foreach ($commissions as $commission) {
+                if ($montantRestant <= 0) break;
+                $commission->update(['statut' => 'payee']);
+                $montantRestant -= (float) $commission->montant_commission;
+            }
+        }
 
         return response()->json($retrait->load(['user', 'traitePar']));
     }
