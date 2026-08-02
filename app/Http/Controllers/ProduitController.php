@@ -28,12 +28,14 @@ class ProduitController extends Controller
     {
         try {
             $request->validate([
-                'nom'            => 'required|string',
-                'reference'      => 'required|string|unique:produits,reference',
-                'prix_unitaire'  => 'required|numeric',
-                'prix_gros'      => 'nullable|numeric',
-                'quantite_stock' => 'required|integer',
-                'unite'          => 'nullable|string',
+                'nom'                    => 'required|string',
+                'reference'              => 'required|string|unique:produits,reference',
+                'prix_unitaire'          => 'required|numeric',
+                'prix_gros'              => 'nullable|numeric',
+                'quantite_stock'         => 'required|integer',
+                'unite'                  => 'nullable|string',
+                'commission_fixe'        => 'nullable|numeric|min:0',
+                'commission_pourcentage' => 'nullable|numeric|min:0|max:100',
             ]);
 
             // Vérification de sécurité pour l'utilisateur connecté
@@ -82,11 +84,13 @@ class ProduitController extends Controller
         $produit = Produit::findOrFail($id);
 
         $request->validate([
-            'nom'            => 'sometimes|string',
-            'prix_unitaire'  => 'sometimes|numeric',
-            'prix_gros'      => 'nullable|numeric',
-            'quantite_stock' => 'sometimes|integer',
-            'unite'          => 'nullable|string',
+            'nom'                    => 'sometimes|string',
+            'prix_unitaire'          => 'sometimes|numeric',
+            'prix_gros'              => 'nullable|numeric',
+            'quantite_stock'         => 'sometimes|integer',
+            'unite'                  => 'nullable|string',
+            'commission_fixe'        => 'nullable|numeric|min:0',
+            'commission_pourcentage' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $produit->update($request->all());

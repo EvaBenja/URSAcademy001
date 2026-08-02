@@ -3,7 +3,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 class Produit extends Model {
-    protected $fillable = ['nom','reference','prix_unitaire','prix_gros','quantite_stock','unite'];
+    protected $fillable = ['nom','reference','prix_unitaire','prix_gros','quantite_stock','unite','commission_fixe','commission_pourcentage'];
     public function ventes()     { return $this->hasMany(Vente::class); }
     public function mouvements() { return $this->hasMany(MouvementStock::class); }
 }
