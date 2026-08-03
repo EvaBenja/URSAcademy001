@@ -302,12 +302,27 @@ class LivraisonController extends Controller
                     ->update(['statut' => 'terminee', 'updated_at' => now()]);
             }
 
-            // Valider les commissions
+            // Créer les commissions après validation comptable (pas avant)
             if (Schema::hasTable('commissions')) {
-                \Illuminate\Support\Facades\DB::table('commissions')
-                    ->where('vente_id', $livraison->vente_id)
-                    ->where('statut', 'en_attente')
-                    ->update(['statut' => 'validee', 'updated_at' => now()]);
+                $vente = \App\Models\Vente::with('items.produit')->find($livraison->vente_id);
+                if ($vente && $vente->items->isNotEmpty()) {
+                    foreach ($vente->items as $item) {
+                        $commFix = (float)($item->produit?->commission_fixe ?? 0);
+                        if ($commFix > 0) {
+                            \App\Models\Commission::firstOrCreate(
+                                ['vente_id' => $vente->id, 'produit_id' => $item->produit_id],
+                                [
+                                    'user_id'                => $vente->caissiere_id,
+                                    'montant_vente'          => $item->sous_total,
+                                    'commission_fixe'        => $commFix,
+                                    'commission_pourcentage' => 0,
+                                    'montant_commission'     => $commFix * $item->quantite,
+                                    'statut'                 => 'validee',
+                                ]
+                            );
+                        }
+                    }
+                }
             }
         }
 
