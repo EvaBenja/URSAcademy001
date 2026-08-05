@@ -68,6 +68,28 @@ class CommissionController extends Controller
         ]);
     }
 
+    public function modifier(Request $request, $id)
+    {
+        $request->validate([
+            'montant_commission' => 'required|numeric|min:0',
+            'motif_modification' => 'required|string|min:5',
+        ]);
+
+        $commission = Commission::with(['user','produit','vente'])->findOrFail($id);
+
+        $montantInitial = $commission->montant_initial ?? $commission->montant_commission;
+
+        $commission->update([
+            'montant_initial'    => $montantInitial,
+            'montant_commission' => $request->montant_commission,
+            'motif_modification' => $request->motif_modification,
+            'modifie_par'        => $request->user()->id,
+            'modifie_le'         => now(),
+        ]);
+
+        return response()->json($commission->load(['user','produit','vente','modifiePar']));
+    }
+
     public function valider($id)
     {
         $commission = Commission::findOrFail($id);

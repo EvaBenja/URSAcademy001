@@ -118,6 +118,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Commissions
     Route::get('/commissions',                [CommissionController::class, 'index']);
     Route::get('/commissions/stats',          [CommissionController::class, 'stats']);
+    Route::put('/commissions/{id}/modifier',  [CommissionController::class, 'modifier']);
     Route::post('/commissions/{id}/valider',  [CommissionController::class, 'valider']);
     Route::post('/commissions/{id}/payer',    [CommissionController::class, 'payer']);
 
