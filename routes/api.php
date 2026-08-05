@@ -61,6 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/ventes/classement',       [VenteController::class, 'classementVendeurs']);
     Route::get('/ventes/stats',            [VenteController::class, 'chiffreAffaires']);
     Route::get('/ventes/chiffre-affaires', [VenteController::class, 'chiffreAffaires']);
+    Route::get('/ventes/historique-ca',    [VenteController::class, 'historiqueCa']);
     Route::get('/ventes/export',          [VenteController::class, 'exportCsv']);
     Route::delete('/ventes/purger',       [VenteController::class, 'purger']);
     Route::get('/ventes/par-caissiere',    [VenteController::class, 'chiffreAffairesParCaissiere']);
