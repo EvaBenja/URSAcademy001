@@ -384,7 +384,7 @@ class LivraisonController extends Controller
             if ($livraison->livreur_id !== $userId || $livraison->statut !== 'rejetee') {
                 return response()->json(['message' => 'Vous ne pouvez supprimer que vos propres livraisons rejetées'], 422);
             }
-        } elseif (!in_array($roleNom, ['super_admin','gestionnaire','coordinateur'])) {
+        } elseif (!in_array($roleNom, ['super_admin','gestionnaire','coordinateur','compta'])) {
             return response()->json(['message' => 'Accès refusé'], 403);
         }
 
