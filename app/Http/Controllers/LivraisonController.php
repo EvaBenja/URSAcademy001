@@ -373,6 +373,25 @@ class LivraisonController extends Controller
         return response()->json(['message' => 'Remise confirmée — le livreur peut finaliser la livraison']);
     }
 
+    // Supprimer une livraison rejetée
+    public function supprimer(Request $request, $id)
+    {
+        $livraison = Livraison::findOrFail($id);
+        $roleNom   = $request->user()?->role?->nom;
+        $userId    = $request->user()->id;
+
+        if ($roleNom === 'livreur') {
+            if ($livraison->livreur_id !== $userId || $livraison->statut !== 'rejetee') {
+                return response()->json(['message' => 'Vous ne pouvez supprimer que vos propres livraisons rejetées'], 422);
+            }
+        } elseif (!in_array($roleNom, ['super_admin','gestionnaire','coordinateur'])) {
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
+        $livraison->delete();
+        return response()->json(['message' => 'Livraison supprimée']);
+    }
+
     public function retirerLivreur(Request $request, $id)
     {
         $livraison = Livraison::findOrFail($id);
