@@ -302,6 +302,8 @@ class LivraisonController extends Controller
                     ->update(['statut' => 'terminee', 'updated_at' => now()]);
             }
 
+             }
+
 
                 // Répartition automatique des revenus
         $livraisonFresh = Livraison::with('vente.items.produit')->find($id);
