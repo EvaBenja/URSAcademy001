@@ -107,6 +107,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Comptabilité
     Route::get('/comptabilite/journalier',  [ComptabiliteController::class, 'journalier']);
+    Route::get('/comptabilite/journal',     [ComptabiliteController::class, 'journal']);
 
     // Configuration
     Route::get('/configuration',            [ConfigurationController::class, 'index']);
