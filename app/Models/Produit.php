@@ -51,22 +51,22 @@ class Produit extends Model
     }
 
     // Calculer la répartition complète pour une vente donnée
-    public function repartition(float $montantVente): array
-    {
-        $commVendeur  = $this->commission_fixe + ($montantVente * $this->commission_pourcentage / 100);
-        $commLivreur  = $this->commission_livreur_fixe + ($montantVente * $this->commission_livreur_pourcentage / 100);
-        $mediabuying  = (float) $this->budget_media_buying;
-        $stock        = (float) $this->budget_stock;
-        $benefice     = (float) $this->benefice;
+        public function repartition(float $montantVente, int $quantite = 1): array
+        {
+            $commVendeur  = $this->commission_fixe * $quantite + ($montantVente * $this->commission_pourcentage / 100);
+            $commLivreur  = $this->commission_livreur_fixe * $quantite + ($montantVente * $this->commission_livreur_pourcentage / 100);
+            $mediabuying  = (float) $this->budget_media_buying * $quantite;
+            $stock        = (float) $this->budget_stock * $quantite;
+            $benefice     = (float) $this->benefice * $quantite;
 
-        return [
-            'montant_vente'      => $montantVente,
-            'commission_vendeur' => round($commVendeur, 2),
-            'commission_livreur' => round($commLivreur, 2),
-            'media_buying'       => round($mediabuying, 2),
-            'budget_stock'       => round($stock, 2),
-            'benefice'           => round($benefice, 2),
-            'total_reparti'      => round($commVendeur + $commLivreur + $mediabuying + $stock + $benefice, 2),
-        ];
-    }
+            return [
+                'montant_vente'      => $montantVente,
+                'commission_vendeur' => round($commVendeur, 2),
+                'commission_livreur' => round($commLivreur, 2),
+                'media_buying'       => round($mediabuying, 2),
+                'budget_stock'       => round($stock, 2),
+                'benefice'           => round($benefice, 2),
+                'total_reparti'      => round($commVendeur + $commLivreur + $mediabuying + $stock + $benefice, 2),
+            ];
+        }
 }

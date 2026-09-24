@@ -30,7 +30,7 @@ class RepartitionController extends Controller
                 $produit = $item->produit;
                 if (!$produit) continue;
 
-                $rep = $produit->repartition((float) $item->sous_total);
+                $rep = $produit->repartition((float) $item->sous_total, $item->quantite);
                 self::enregistrerRepartition($rep, $vente, $livraison, $produit->id, $vendeurId, $livreurId, $boutiqueId);
             }
         } else {
