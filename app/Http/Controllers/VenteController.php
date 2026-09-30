@@ -22,13 +22,15 @@ class VenteController extends Controller
 
         $query = Vente::with($with)->orderByDesc('created_at');
 
-        // Si vendeur, filtrer ses propres ventes seulement
+        // Vendeur voit seulement ses ventes
         $user = $request->user();
         if ($user && $user->role?->nom === 'vendeur') {
             $query->where('caissiere_id', $user->id);
         }
 
-        return response()->json($query->get());
+        // Limite par défaut à 500 pour éviter surcharge (param ?limit pour override)
+        $limit = min((int)($request->query('limit', 500)), 1000);
+        return response()->json($query->limit($limit)->get());
     }
 
     public function store(Request $request)

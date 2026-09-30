@@ -41,7 +41,7 @@ class LivraisonController extends Controller
             });
         }
 
-        return response()->json($query->get());
+        return response()->json($query->limit(500)->get());
     }
 
     public function store(Request $request)
