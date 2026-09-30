@@ -41,7 +41,7 @@ class LivraisonController extends Controller
             });
         }
 
-        return response()->json($query->limit(500)->get());
+        return response()->json($query->where('created_at', '>=', now()->subDays(30))->limit(200)->get());
     }
 
     public function store(Request $request)

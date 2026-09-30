@@ -22,15 +22,17 @@ class VenteController extends Controller
 
         $query = Vente::with($with)->orderByDesc('created_at');
 
-        // Vendeur voit seulement ses ventes
         $user = $request->user();
         if ($user && $user->role?->nom === 'vendeur') {
-            $query->where('caissiere_id', $user->id);
+            // Vendeur : seulement ses ventes, 90 jours max
+            $query->where('caissiere_id', $user->id)
+                  ->where('created_at', '>=', now()->subDays(90));
+        } else {
+            // Autres rôles : 30 derniers jours seulement
+            $query->where('created_at', '>=', now()->subDays(30));
         }
 
-        // Limite par défaut à 500 pour éviter surcharge (param ?limit pour override)
-        $limit = min((int)($request->query('limit', 500)), 1000);
-        return response()->json($query->limit($limit)->get());
+        return response()->json($query->limit(200)->get());
     }
 
     public function store(Request $request)
