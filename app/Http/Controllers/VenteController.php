@@ -14,12 +14,21 @@ use Illuminate\Support\Facades\Schema;
 
 class VenteController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $with = Schema::hasTable('vente_items')
             ? ['produit','caissiere','items.produit','livraison.livreur']
             : ['produit','caissiere','livraison.livreur'];
-        return response()->json(Vente::with($with)->orderByDesc('created_at')->get());
+
+        $query = Vente::with($with)->orderByDesc('created_at');
+
+        // Si vendeur, filtrer ses propres ventes seulement
+        $user = $request->user();
+        if ($user && $user->role?->nom === 'vendeur') {
+            $query->where('caissiere_id', $user->id);
+        }
+
+        return response()->json($query->get());
     }
 
     public function store(Request $request)
