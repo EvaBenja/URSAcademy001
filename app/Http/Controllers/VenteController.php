@@ -231,6 +231,19 @@ class VenteController extends Controller
         $request->validate(['motif' => 'required|string|min:3']);
 
         $vente = Vente::findOrFail($id);
+
+        // Vendeur ne peut annuler que ses propres ventes et seulement si pas encore en livraison
+        $user = $request->user();
+        if ($user->role?->nom === 'vendeur') {
+            if ($vente->caissiere_id !== $user->id) {
+                return response()->json(['message' => 'Vous ne pouvez pas annuler cette vente'], 403);
+            }
+            $livStatut = $vente->livraison?->statut;
+            if (in_array($livStatut, ['en_cours','livree_attente_validation','terminee'])) {
+                return response()->json(['message' => 'Impossible — la livraison est déjà en cours ou terminée'], 422);
+            }
+        }
+
         if ($vente->statut === 'annulee') {
             return response()->json(['message' => 'Vente déjà annulée'], 422);
         }
