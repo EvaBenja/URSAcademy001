@@ -101,9 +101,27 @@ class ProduitController extends Controller
     public function destroy($id)
     {
         $produit = Produit::findOrFail($id);
+
+        // Vérifier si le produit a des ventes liées
+        $nbVentes = \Illuminate\Support\Facades\DB::table('vente_items')
+            ->where('produit_id', $id)->count();
+
+        if ($nbVentes > 0) {
+            // Produit lié à des ventes — désactiver au lieu de supprimer
+            $produit->update([
+                'actif'           => false,
+                'quantite_stock'  => 0,
+                'nom'             => '[Archivé] ' . $produit->nom,
+            ]);
+            return response()->json([
+                'message' => 'Produit archivé (lié à ' . $nbVentes . ' vente(s) — données préservées)'
+            ]);
+        }
+
+        // Aucune vente liée — suppression définitive
         $produit->delete();
         return response()->json([
-            'message' => 'Produit supprimé avec succès'
+            'message' => 'Produit supprimé définitivement'
         ]);
     }
 }
