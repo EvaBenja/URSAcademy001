@@ -39,6 +39,8 @@ class LivraisonController extends Controller
                         ->where('livreur_id', '!=', $user->id);
                 });
             });
+            // Pas de filtre date pour les livraisons disponibles
+            return response()->json($query->limit(200)->get());
         }
 
         return response()->json($query->where('created_at', '>=', now()->subDays(30))->limit(200)->get());
