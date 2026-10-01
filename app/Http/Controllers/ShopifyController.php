@@ -200,6 +200,18 @@ class ShopifyController extends Controller
             'notes'           => 'Commande Shopify #' . $commande->shopify_order_number,
         ]);
 
+        // Créer la livraison automatiquement pour que les livreurs voient la course
+        \App\Models\Livraison::create([
+            'vente_id'         => $vente->id,
+            'boutique_id'      => $commande->boutique_id,
+            'statut'           => 'en_attente',
+            'date_livraison'   => now()->toDateString(),
+            'zone_livraison'   => $request->zone_livraison ?? $commande->client_ville,
+            'client_nom'       => $commande->client_nom,
+            'client_telephone' => $commande->client_telephone,
+            'client_quartier'  => $commande->client_adresse,
+        ]);
+
         return $vente;
     }
 
