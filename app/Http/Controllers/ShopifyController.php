@@ -182,11 +182,22 @@ class ShopifyController extends Controller
     // ── Créer une vente depuis une commande Shopify confirmée ──
     private function creerVenteDepuisCommande(CommandeClosing $commande, Request $request): Vente
     {
+        // produit_id obligatoire en base — utiliser le premier produit de la commande ou un produit par défaut
+        $produits = $commande->produits ?? [];
+        $produitId = null;
+        if (!empty($produits)) {
+            $premier = is_array($produits[0]) ? $produits[0] : (array)$produits[0];
+            $produitId = \App\Models\Produit::where('nom', 'like', '%'.($premier['nom'] ?? '').'%')->value('id');
+        }
+        if (!$produitId) {
+            $produitId = \App\Models\Produit::first()?->id;
+        }
+
         $vente = Vente::create([
             'caissiere_id'    => $commande->vendeur_id,
             'boutique_id'     => $commande->boutique_id,
-            'produit_id'      => null,
-            'quantite'        => count($commande->produits ?? []),
+            'produit_id'      => $produitId,
+            'quantite'        => max(1, count($produits)),
             'prix_unitaire'   => $commande->montant_total,
             'prix_vendeur'    => $commande->montant_total,
             'remise'          => 0,
