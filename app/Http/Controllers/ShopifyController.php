@@ -193,6 +193,14 @@ class ShopifyController extends Controller
             $produitId = \App\Models\Produit::first()?->id;
         }
 
+        // Construire le résumé des produits Shopify
+        $resumeProduits = collect($produits)->map(fn($p) =>
+            ($p['nom'] ?? $p['name'] ?? '?') .
+            (isset($p['variante']) ? ' ('.$p['variante'].')' : '') .
+            ' ×'.($p['quantite'] ?? 1) .
+            ' – '.number_format((float)($p['prix'] ?? 0), 0, ',', ' ').' FCFA'
+        )->implode(' | ');
+
         $vente = Vente::create([
             'caissiere_id'    => $commande->vendeur_id,
             'boutique_id'     => $commande->boutique_id,
@@ -208,7 +216,7 @@ class ShopifyController extends Controller
             'client_nom'      => $commande->client_nom,
             'client_telephone'=> $commande->client_telephone,
             'client_quartier' => $commande->client_adresse,
-            'notes'           => 'Commande Shopify #' . $commande->shopify_order_number,
+            'notes'           => 'Shopify #'.$commande->shopify_order_number.' | '.$resumeProduits,
         ]);
 
         // Créer la livraison automatiquement pour que les livreurs voient la course
