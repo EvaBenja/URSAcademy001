@@ -108,10 +108,11 @@ class ProduitController extends Controller
 
         if ($nbVentes > 0) {
             // Produit lié à des ventes — désactiver au lieu de supprimer
+            $nomPropre = trim(preg_replace('/(\[Archivé\]\s*)*/i', '', $produit->nom));
             $produit->update([
                 'actif'           => false,
                 'quantite_stock'  => 0,
-                'nom'             => '[Archivé] ' . $produit->nom,
+                'nom'             => '[Archivé] ' . $nomPropre,
             ]);
             return response()->json([
                 'message' => 'Produit archivé (lié à ' . $nbVentes . ' vente(s) — données préservées)'
