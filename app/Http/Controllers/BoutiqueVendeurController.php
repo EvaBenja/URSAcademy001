@@ -180,7 +180,7 @@ class BoutiqueVendeurController extends Controller
             'lien'           => config('app.url') . '/boutique/' . $user->code_boutique,
             'nb_commandes'   => $ventes->count(),
             'ca_total'       => $ventes->sum('montant_total'),
-            'ca_aujourd_hui' => $ventes->whereDate('date_vente', today())->sum('montant_total'),
+            'ca_aujourd_hui' => $ventes->filter(fn($v) => $v->date_vente === today()->toDateString())->sum('montant_total'),
         ]);
     }
 }
