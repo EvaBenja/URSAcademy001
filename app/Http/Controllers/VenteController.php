@@ -34,18 +34,25 @@ class VenteController extends Controller
 
         $ventes = $query->limit(200)->get();
 
-        // Pour les ventes Shopify, remplacer le nom du produit par le vrai nom depuis les notes
-        $ventes->each(function($vente) {
-            if ($vente->notes && str_contains($vente->notes, 'Shopify')) {
-                // Extraire le nom produit depuis les notes : "Shopify #1234 | NOM PRODUIT ×1 – prix"
-                $nomProduit = preg_replace('/^Shopify #\d+ \| /', '', $vente->notes);
-                if ($vente->produit) {
-                    $vente->produit->nom = $nomProduit;
+        return response()->json($ventes->map(function($vente) {
+            $arr = $vente->toArray();
+            if (!empty($vente->notes) && str_contains($vente->notes, 'Shopify')) {
+                $nomShopify = preg_replace('/^Shopify #\d+ \| /', '', $vente->notes);
+                if (isset($arr['produit']) && is_array($arr['produit'])) {
+                    $arr['produit']['nom'] = $nomShopify;
+                }
+            } elseif (isset($arr['produit']['nom'])) {
+                $arr['produit']['nom'] = trim(preg_replace('/(\[Arch[ié]v[eé]\]\s*)*/iu', '', $arr['produit']['nom']));
+            }
+            if (!empty($arr['items'])) {
+                foreach ($arr['items'] as &$item) {
+                    if (isset($item['produit']['nom'])) {
+                        $item['produit']['nom'] = trim(preg_replace('/(\[Arch[ié]v[eé]\]\s*)*/iu', '', $item['produit']['nom']));
+                    }
                 }
             }
-        });
-
-        return response()->json($ventes);
+            return $arr;
+        }));
     }
 
     public function store(Request $request)
