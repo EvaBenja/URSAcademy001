@@ -88,6 +88,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/livraisons/{id}/refuser-cloture', [LivraisonController::class, 'refuserCloture']);
     Route::post('/livraisons/{id}/notif-lue',       [LivraisonController::class, 'marquerNotifLue']);
     Route::post('/livraisons/{id}/confirmer-remise',[LivraisonController::class, 'confirmerRemise']);
+    Route::post('/livraisons/{id}/retirer-livreur', [LivraisonController::class, 'retirerLivreur']);
+    Route::delete('/livraisons/{id}',               [LivraisonController::class, 'supprimer']);
+
 
     // Dossiers journaliers
     Route::get('/dossiers',                 [DossierController::class, 'index']);

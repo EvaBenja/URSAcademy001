@@ -313,7 +313,13 @@ class LivraisonController extends Controller
             \App\Http\Controllers\RepartitionController::repartir($livraisonFresh);
         }
 
-        return response()->json(['message' => 'Clôture validée ✓']);
+            // Retourner la livraison complète avec ses produits pour mise à jour frontend
+        $livraisonComplete = Livraison::with(['livreur', 'gestionnaire', 'produits.produit', 'vente.items.produit'])->find($id);
+
+        return response()->json([
+            'message'   => 'Clôture validée ✓',
+            'livraison' => $livraisonComplete,
+        ]);
     }
 
     public function refuserCloture(Request $request, $id)
