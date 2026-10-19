@@ -12,7 +12,7 @@ class ComptabiliteController extends Controller
     {
         $date = $request->query('date', now()->format('Y-m-d'));
 
-        $ventes = Vente::with(['items.produit', 'caissiere', 'livraison'])
+       $ventes = Vente::with(['produit', 'items.produit', 'caissiere', 'livraison'])
             ->whereDate('date_vente', $date)
             ->orderBy('created_at', 'asc')
             ->get();
@@ -103,7 +103,7 @@ class ComptabiliteController extends Controller
     {
         $depuis = $request->query('depuis', null);
 
-        $query = Vente::with(['items.produit', 'caissiere', 'livraison'])
+        $query = Vente::with(['produit', 'items.produit', 'caissiere', 'livraison'])
             ->where('statut', '!=', 'annulee')
             ->orderBy('date_vente', 'desc')
             ->orderBy('created_at', 'desc');
