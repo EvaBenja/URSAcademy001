@@ -20,7 +20,8 @@ class RepartitionController extends Controller
         $vente = $livraison->vente;
         if (!$vente) return;
 
-        $items = $vente->items;
+        // APRÈS :
+        $items = $vente->items()->get();
         $vendeurId = $vente->caissiere_id;
         $livreurId = $livraison->livreur_id;
         $boutiqueId = $vente->boutique_id;
