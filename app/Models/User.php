@@ -14,6 +14,7 @@ class User extends Authenticatable
         'boutique_id','name', 'prenom', 'nom', 'email', 'password',
         'role_id', 'telephone', 'statut',
         'latitude', 'longitude', 'position_updated_at',
+        'code_boutique', 'nom_boutique', 'description_boutique',
     ];
 
     protected $hidden = [
