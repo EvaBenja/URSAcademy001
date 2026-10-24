@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 
 // Purger les livraisons rejetées depuis plus de 3 jours — chaque nuit à 2h
 Schedule::command('livraisons:purger-rejetees')->dailyAt('02:00');
+
+Schedule::command('stock:regulariser')->dailyAt('00:00');
