@@ -12,6 +12,7 @@ class Produit extends Model
         'prix_unitaire',
         'prix_gros',
         'quantite_stock',
+        'en_campagne',
         'unite',
         'boutique_id',
         // Commissions vendeur
@@ -38,6 +39,7 @@ class Produit extends Model
         'budget_media_buying'            => 'decimal:2',
         'budget_stock'                   => 'decimal:2',
         'benefice'                       => 'decimal:2',
+        'en_campagne' => 'boolean',
     ];
 
     public function ventes()

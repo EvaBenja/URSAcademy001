@@ -10,10 +10,20 @@ use Illuminate\Support\Facades\Log;
 class ProduitController extends Controller
 {
     // Lister tous les produits (Sécurisé pour intercepter l'erreur 500)
-    public function index()
+        public function index(Request $request)
     {
         try {
-            $produits = Produit::all();
+            $roleNom = $request->user()?->role?->nom;
+
+            // Livreurs et vendeurs ne voient que les produits en campagne
+            if (in_array($roleNom, ['livreur', 'vendeur'])) {
+                $produits = Produit::where('en_campagne', true)
+                                ->where('actif', true)
+                                ->get();
+            } else {
+                $produits = Produit::all();
+            }
+
             return response()->json($produits);
         } catch (\Exception $e) {
             Log::error('Erreur index produit : ' . $e->getMessage());
