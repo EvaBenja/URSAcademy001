@@ -35,21 +35,23 @@ class BoutiqueVendeurController extends Controller
     // ── Modifier les infos de sa boutique ──
     public function updateBoutique(Request $request)
     {
-        $request->validate([
-            'nom_boutique'         => 'nullable|string|max:100',
-            'description_boutique' => 'nullable|string',
-        ]);
+    $request->validate([
+    'nom_boutique'         => 'nullable|string|max:100',
+    'description_boutique' => 'nullable|string',
+    'whatsapp_boutique'    => 'nullable|string|max:20',
+    ]);
 
-        $user = $request->user();
-        $user->update([
-            'nom_boutique'         => $request->nom_boutique,
-            'description_boutique' => $request->description_boutique,
-        ]);
+    $user = $request->user();
+    $user->update([
+        'nom_boutique'         => $request->nom_boutique,
+        'description_boutique' => $request->description_boutique,
+        'whatsapp_boutique'    => $request->whatsapp_boutique,
+    ]);
 
-        return response()->json([
-            'message'      => 'Boutique mise à jour',
-            'nom_boutique' => $user->nom_boutique,
-        ]);
+    return response()->json([
+        'message'      => 'Boutique mise à jour',
+        'nom_boutique' => $user->nom_boutique,
+    ]);
     }
 
     // ── Page publique boutique vendeur (accessible sans authentification) ──
@@ -71,9 +73,10 @@ class BoutiqueVendeurController extends Controller
 
         return response()->json([
             'vendeur' => [
-                'nom'          => $vendeur->nom_boutique ?? $vendeur->name,
-                'description'  => $vendeur->description_boutique,
-                'code_boutique'=> $vendeur->code_boutique,
+                'nom'               => $vendeur->nom_boutique ?? $vendeur->name,
+                'description'       => $vendeur->description_boutique,
+                'code_boutique'     => $vendeur->code_boutique,
+                'whatsapp_boutique' => $vendeur->whatsapp_boutique,
             ],
             'produits' => $produits,
         ]);
