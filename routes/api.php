@@ -19,6 +19,7 @@ use App\Http\Controllers\BoutiqueController;
 use App\Http\Controllers\BoutiqueVendeurController;
 use App\Http\Controllers\ShopifyController;
 use App\Http\Controllers\RepartitionController;
+use App\Http\Controllers\BilanLivreurController;
 
 // ── Routes publiques ─────────────────────────────────────────
 Route::post('/login',         [AuthController::class, 'login']);
@@ -168,4 +169,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/utilisateurs/{id}',                [UtilisateurController::class, 'update']);
     Route::delete('/utilisateurs/{id}',             [UtilisateurController::class, 'destroy']);
     Route::get('/roles',                            [UtilisateurController::class, 'roles']);
+
+    // Bilans journaliers livreurs
+    Route::get('/bilans',                    [BilanLivreurController::class, 'index']);
+    Route::post('/bilans',                   [BilanLivreurController::class, 'store']);
+    Route::get('/bilans/mon-bilan',          [BilanLivreurController::class, 'monBilan']);
+    Route::patch('/bilans/{id}/cloturer',    [BilanLivreurController::class, 'cloturer']);
 });
