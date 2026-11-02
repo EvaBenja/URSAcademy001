@@ -30,7 +30,7 @@ Route::get('/roles-public',   [UtilisateurController::class, 'rolesPublic']);
 
 // Boutique vendeur publique — sans authentification
 Route::get('/boutique/{code}',           [BoutiqueVendeurController::class, 'boutiquePub']);
-Route::post('/boutique/{code}/commander',[BoutiqueVendeurController::class, 'commander'])->middleware('throttle:8,1');
+Route::post('/boutique/{code}/commander',[BoutiqueVendeurController::class, 'commander'])->middleware('throttle:12,1');
 
 // Webhook Shopify — DOIT être public (pas de token)
 Route::post('/shopify/webhook/orders',   [ShopifyController::class, 'webhookOrders']);
