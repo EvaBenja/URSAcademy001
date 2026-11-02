@@ -174,5 +174,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bilans',                    [BilanLivreurController::class, 'index']);
     Route::post('/bilans',                   [BilanLivreurController::class, 'store']);
     Route::get('/bilans/mon-bilan',          [BilanLivreurController::class, 'monBilan']);
+    Route::get('/bilans/historique',         [BilanLivreurController::class, 'historique']);
+    Route::post('/bilans/{id}/lignes',       [BilanLivreurController::class, 'ajouterLignes']);
     Route::patch('/bilans/{id}/cloturer',    [BilanLivreurController::class, 'cloturer']);
 });
