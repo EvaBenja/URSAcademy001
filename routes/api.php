@@ -20,6 +20,7 @@ use App\Http\Controllers\BoutiqueVendeurController;
 use App\Http\Controllers\ShopifyController;
 use App\Http\Controllers\RepartitionController;
 use App\Http\Controllers\BilanLivreurController;
+use App\Http\Controllers\BoutiqueProduitController;
 
 // ── Routes publiques ─────────────────────────────────────────
 Route::post('/login',         [AuthController::class, 'login']);
@@ -29,7 +30,7 @@ Route::get('/roles-public',   [UtilisateurController::class, 'rolesPublic']);
 
 // Boutique vendeur publique — sans authentification
 Route::get('/boutique/{code}',           [BoutiqueVendeurController::class, 'boutiquePub']);
-Route::post('/boutique/{code}/commander',[BoutiqueVendeurController::class, 'commander']);
+Route::post('/boutique/{code}/commander',[BoutiqueVendeurController::class, 'commander'])->middleware('throttle:12,1');
 
 // Webhook Shopify — DOIT être public (pas de token)
 Route::post('/shopify/webhook/orders',   [ShopifyController::class, 'webhookOrders']);
@@ -149,6 +150,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mon-lien',                         [BoutiqueVendeurController::class, 'monLien']);
     Route::put('/ma-boutique',                      [BoutiqueVendeurController::class, 'updateBoutique']);
     Route::get('/ma-boutique/stats',                [BoutiqueVendeurController::class, 'mesBoutiqueStats']);
+    Route::get('/ma-boutique/produits',                  [BoutiqueProduitController::class, 'index']);
+    Route::post('/ma-boutique/produits',                 [BoutiqueProduitController::class, 'store']);
+    Route::post('/ma-boutique/produits/{id}/modifier',   [BoutiqueProduitController::class, 'update']);
+    Route::delete('/ma-boutique/produits/{id}',          [BoutiqueProduitController::class, 'destroy']);
 
     // Closing Shopify
     Route::get('/closing',                          [ShopifyController::class, 'index']);
@@ -174,5 +179,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bilans',                    [BilanLivreurController::class, 'index']);
     Route::post('/bilans',                   [BilanLivreurController::class, 'store']);
     Route::get('/bilans/mon-bilan',          [BilanLivreurController::class, 'monBilan']);
+    Route::get('/bilans/historique',         [BilanLivreurController::class, 'historique']);
+    Route::post('/bilans/{id}/lignes',       [BilanLivreurController::class, 'ajouterLignes']);
     Route::patch('/bilans/{id}/cloturer',    [BilanLivreurController::class, 'cloturer']);
 });

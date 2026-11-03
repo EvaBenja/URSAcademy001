@@ -9,6 +9,21 @@ use Illuminate\Support\Facades\Log;
 
 class ProduitController extends Controller
 {
+    // Champs modifiables via l'API (évite le mass assignment sur boutique_id, benefice, etc.)
+    private const CHAMPS = [
+        'nom', 'reference', 'prix_unitaire', 'prix_gros', 'quantite_stock', 'unite',
+        'en_campagne',
+        'commission_fixe', 'commission_pourcentage',
+    ];
+
+    // Réservé aux gestionnaires et super admins
+    private function autoriserGestion(Request $request): void
+    {
+        if (!in_array($request->user()?->role?->nom, ['gestionnaire', 'super_admin'])) {
+            abort(403, 'Accès refusé');
+        }
+    }
+
     // Lister tous les produits (Sécurisé pour intercepter l'erreur 500)
         public function index(Request $request)
     {
@@ -36,6 +51,9 @@ class ProduitController extends Controller
     // Créer un produit
     public function store(Request $request)
     {
+        // Avant le try : sinon le catch (\Exception) transformerait le 403 en 500
+        $this->autoriserGestion($request);
+
         try {
             $request->validate([
                 'nom'                    => 'required|string',
@@ -55,7 +73,7 @@ class ProduitController extends Controller
                 ], 401);
             }
 
-            $produit = Produit::create($request->all());
+            $produit = Produit::create($request->only(self::CHAMPS));
 
             // Enregistrer le mouvement de stock
             MouvementStock::create([
@@ -91,6 +109,8 @@ class ProduitController extends Controller
     // Modifier un produit
     public function update(Request $request, $id)
     {
+        $this->autoriserGestion($request);
+
         $produit = Produit::findOrFail($id);
 
         $request->validate([
@@ -103,13 +123,15 @@ class ProduitController extends Controller
             'commission_pourcentage' => 'nullable|numeric|min:0|max:100',
         ]);
 
-        $produit->update($request->all());
+        $produit->update($request->only(self::CHAMPS));
         return response()->json($produit);
     }
 
     // Supprimer un produit
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->autoriserGestion($request);
+
         $produit = Produit::findOrFail($id);
 
         // Vérifier si le produit a des ventes liées
