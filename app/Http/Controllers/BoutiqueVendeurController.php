@@ -6,11 +6,19 @@ use App\Models\User;
 use App\Models\Produit;
 use App\Models\Vente;
 use App\Models\VenteItem;
+use App\Models\Livraison;
+use App\Models\LivraisonProduit;
+use App\Models\BoutiqueProduit;
+use App\Services\GeocodingService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class BoutiqueVendeurController extends Controller
 {
+    private const MARQUE_NOTES = 'Commande boutique en ligne';
+
     // ── Générer ou récupérer le lien boutique du vendeur ──
     public function monLien(Request $request)
     {
@@ -22,53 +30,66 @@ class BoutiqueVendeurController extends Controller
             $user->update(['code_boutique' => $code]);
         }
 
-        $lien = config('app.url') . '/boutique/' . $user->code_boutique;
-
         return response()->json([
-            'code_boutique'       => $user->code_boutique,
-            'lien'                => $lien,
-            'nom_boutique'        => $user->nom_boutique ?? $user->name,
-            'description_boutique'=> $user->description_boutique,
+            'code_boutique'        => $user->code_boutique,
+            'lien'                 => config('app.url') . '/boutique/' . $user->code_boutique,
+            'nom_boutique'         => $user->nom_boutique ?? $user->name,
+            'description_boutique' => $user->description_boutique,
+            'whatsapp_boutique'    => $user->whatsapp_boutique,
         ]);
     }
 
-    // ── Modifier les infos de sa boutique ──
+    // ── Modifier les infos de sa boutique (seuls les champs envoyés sont modifiés) ──
     public function updateBoutique(Request $request)
     {
-    $request->validate([
-    'nom_boutique'         => 'nullable|string|max:100',
-    'description_boutique' => 'nullable|string',
-    'whatsapp_boutique'    => 'nullable|string|max:20',
-    ]);
+        $request->validate([
+            'nom_boutique'         => 'nullable|string|max:100',
+            'description_boutique' => 'nullable|string|max:2000',
+            'whatsapp_boutique'    => 'nullable|string|max:20',
+        ]);
 
-    $user = $request->user();
-    $user->update([
-        'nom_boutique'         => $request->nom_boutique,
-        'description_boutique' => $request->description_boutique,
-        'whatsapp_boutique'    => $request->whatsapp_boutique,
-    ]);
+        $data = [];
+        foreach (['nom_boutique', 'description_boutique', 'whatsapp_boutique'] as $champ) {
+            if ($request->exists($champ)) {
+                $data[$champ] = $request->input($champ);
+            }
+        }
 
-    return response()->json([
-        'message'      => 'Boutique mise à jour',
-        'nom_boutique' => $user->nom_boutique,
-    ]);
+        $user = $request->user();
+        if ($data) {
+            $user->update($data);
+        }
+
+        return response()->json([
+            'message'           => 'Boutique mise à jour',
+            'nom_boutique'      => $user->nom_boutique,
+            'whatsapp_boutique' => $user->whatsapp_boutique,
+        ]);
     }
 
-    // ── Page publique boutique vendeur (accessible sans authentification) ──
-    public function boutiquePub($code)
+    private function vendeurParCode($code): ?User
     {
-        $vendeur = User::where('code_boutique', $code)
+        return User::where('code_boutique', $code)
             ->whereHas('role', fn($q) => $q->where('nom', 'vendeur'))
             ->first();
+    }
 
+    // ── Page publique boutique vendeur (sans authentification) ──
+    // N'expose QUE les produits que le vendeur a choisi de mettre dans sa vitrine.
+    public function boutiquePub($code)
+    {
+        $vendeur = $this->vendeurParCode($code);
         if (!$vendeur) {
             return response()->json(['message' => 'Boutique introuvable'], 404);
         }
 
-        // Récupérer les produits disponibles de la boutique
-        $produits = Produit::where('boutique_id', $vendeur->boutique_id)
-            ->where('quantite_stock', '>', 0)
-            ->select(['id', 'nom', 'reference', 'prix_unitaire', 'prix_gros', 'unite', 'quantite_stock'])
+        $items = BoutiqueProduit::with('produit')
+            ->where('vendeur_id', $vendeur->id)
+            ->where('actif', true)
+            ->whereHas('produit', fn($q) => $q->where('quantite_stock', '>', 0)
+                ->where('nom', 'not like', '[Archivé]%'))
+            ->orderBy('ordre')
+            ->orderByDesc('id')
             ->get();
 
         return response()->json([
@@ -78,112 +99,185 @@ class BoutiqueVendeurController extends Controller
                 'code_boutique'     => $vendeur->code_boutique,
                 'whatsapp_boutique' => $vendeur->whatsapp_boutique,
             ],
-            'produits' => $produits,
+            'produits' => $items->map(fn($i) => [
+                'id'          => $i->id,
+                'produit_id'  => $i->produit_id,
+                'titre'       => $i->titre,
+                'description' => $i->description,
+                'images'      => $i->images ?? [],
+                'video'       => $i->video,
+                'prix'        => (float) $i->produit->prix_unitaire,
+                'dispo_max'   => min(10, (int) $i->produit->quantite_stock),
+            ])->values(),
         ]);
     }
 
     // ── Commander depuis la boutique publique (sans authentification) ──
     public function commander(Request $request, $code)
     {
+        // Anti-robots : champ invisible pour un humain. On répond "succès" sans rien créer.
+        if ($request->filled('site_web')) {
+            return response()->json(['message' => 'Commande passée avec succès !', 'numero' => 0], 201);
+        }
+
         $request->validate([
-            'client_nom'       => 'required|string',
-            'client_telephone' => 'required|string',
-            'client_adresse'   => 'nullable|string',
-            'client_ville'     => 'nullable|string',
-            'items'            => 'required|array|min:1',
-            'items.*.produit_id' => 'required|exists:produits,id',
-            'items.*.quantite'   => 'required|integer|min:1',
+            'client_nom'         => 'required|string|max:100',
+            'client_telephone'   => ['required', 'string', 'regex:/^[0-9+\s().-]{8,20}$/'],
+            'client_adresse'     => 'nullable|string|max:255',
+            'client_ville'       => 'nullable|string|max:100',
+            'items'              => 'required|array|min:1|max:10',
+            'items.*.produit_id' => 'required|integer',
+            'items.*.quantite'   => 'required|integer|min:1|max:50',
+        ], [
+            'client_telephone.regex' => 'Numéro de téléphone invalide',
         ]);
 
-        $vendeur = User::where('code_boutique', $code)
-            ->whereHas('role', fn($q) => $q->where('nom', 'vendeur'))
-            ->first();
-
+        $vendeur = $this->vendeurParCode($code);
         if (!$vendeur) {
             return response()->json(['message' => 'Boutique introuvable'], 404);
         }
 
-        $montantTotal = 0;
-        $itemsData    = [];
-
-        foreach ($request->items as $item) {
-            $produit = Produit::findOrFail($item['produit_id']);
-
-            if ($produit->quantite_stock < $item['quantite']) {
-                return response()->json([
-                    'message' => 'Stock insuffisant pour : ' . $produit->nom
-                ], 422);
-            }
-
-            $sousTotal     = $produit->prix_unitaire * $item['quantite'];
-            $montantTotal += $sousTotal;
-
-            $itemsData[] = [
-                'produit'    => $produit,
-                'quantite'   => $item['quantite'],
-                'prix'       => $produit->prix_unitaire,
-                'sous_total' => $sousTotal,
-            ];
+        // Regrouper les doublons
+        $demande = [];
+        foreach ($request->items as $it) {
+            $pid = (int) $it['produit_id'];
+            $demande[$pid] = ($demande[$pid] ?? 0) + (int) $it['quantite'];
         }
 
-        // Créer la vente automatiquement au nom du vendeur
-        $vente = Vente::create([
-            'caissiere_id'     => $vendeur->id,
-            'boutique_id'      => $vendeur->boutique_id,
-            'produit_id'       => null,
-            'quantite'         => count($itemsData),
-            'prix_unitaire'    => $montantTotal,
-            'prix_vendeur'     => $montantTotal,
-            'remise'           => 0,
-            'montant_total'    => $montantTotal,
-            'date_vente'       => now()->toDateString(),
-            'zone_livraison'   => $request->client_ville,
-            'statut'           => 'en_attente',
-            'client_nom'       => $request->client_nom,
-            'client_telephone' => $request->client_telephone,
-            'client_quartier'  => $request->client_adresse,
-            'notes'            => 'Commande boutique en ligne vendeur ' . ($vendeur->nom_boutique ?? $vendeur->name),
-        ]);
+        // Seuls les produits actifs de la vitrine de CE vendeur sont commandables
+        $autorises = BoutiqueProduit::where('vendeur_id', $vendeur->id)
+            ->where('actif', true)
+            ->whereIn('produit_id', array_keys($demande))
+            ->pluck('titre', 'produit_id');
 
-        // Créer les items de vente
-        foreach ($itemsData as $item) {
-            VenteItem::create([
-                'vente_id'     => $vente->id,
-                'produit_id'   => $item['produit']->id,
-                'quantite'     => $item['quantite'],
-                'prix_unitaire'=> $item['prix'],
-                'prix_vendeur' => $item['prix'],
-                'remise'       => 0,
-                'sous_total'   => $item['sous_total'],
-            ]);
+        if ($autorises->count() !== count($demande)) {
+            return response()->json(['message' => 'Un des produits n\'est plus disponible'], 422);
+        }
 
-            // Décrémenter le stock
-            $item['produit']->decrement('quantite_stock', $item['quantite']);
+        try {
+            $resultat = DB::transaction(function () use ($request, $vendeur, $demande) {
+                // Verrou : deux commandes simultanées ne peuvent pas dépasser le stock
+                $produits = Produit::whereIn('id', array_keys($demande))->lockForUpdate()->get()->keyBy('id');
+
+                $lignes  = [];
+                $montant = 0;
+                foreach ($demande as $pid => $qte) {
+                    $p = $produits->get($pid);
+                    if (!$p || (int) $p->quantite_stock < $qte) {
+                        throw new \RuntimeException('Stock insuffisant pour : ' . ($p->nom ?? 'produit'));
+                    }
+                    $sousTotal = (float) $p->prix_unitaire * $qte;
+                    $montant  += $sousTotal;
+                    $lignes[]  = ['p' => $p, 'qte' => $qte, 'sous_total' => $sousTotal];
+                }
+
+                $premier = $lignes[0]['p'];
+                $zone    = $request->client_ville ?: $request->client_adresse;
+
+                $vente = Vente::create([
+                    'caissiere_id'     => $vendeur->id,
+                    'boutique_id'      => $vendeur->boutique_id,
+                    'produit_id'       => $premier->id,
+                    'quantite'         => array_sum($demande),
+                    'prix_unitaire'    => (float) $premier->prix_unitaire,
+                    'prix_vendeur'     => (float) $premier->prix_unitaire,
+                    'remise'           => 0,
+                    'montant_total'    => $montant,
+                    'date_vente'       => now()->toDateString(),
+                    'zone_livraison'   => $zone,
+                    'statut'           => 'en_attente',
+                    'client_nom'       => $request->client_nom,
+                    'client_telephone' => $request->client_telephone,
+                    'client_quartier'  => $request->client_adresse ?: $request->client_ville,
+                    'notes'            => self::MARQUE_NOTES . ' — ' . ($vendeur->nom_boutique ?? $vendeur->name),
+                ]);
+
+                foreach ($lignes as $l) {
+                    VenteItem::create([
+                        'vente_id'      => $vente->id,
+                        'produit_id'    => $l['p']->id,
+                        'quantite'      => $l['qte'],
+                        'prix_unitaire' => (float) $l['p']->prix_unitaire,
+                        'prix_vendeur'  => (float) $l['p']->prix_unitaire,
+                        'remise'        => 0,
+                        'sous_total'    => $l['sous_total'],
+                    ]);
+                    $l['p']->decrement('quantite_stock', $l['qte']);
+                }
+
+                // Course visible par les livreurs (comme une vente saisie par le vendeur)
+                $livData = [
+                    'statut'         => 'en_attente',
+                    'date_livraison' => $vente->date_vente,
+                    'zone_livraison' => $vente->zone_livraison,
+                    'notes'          => $vente->notes,
+                ];
+                foreach (['vente_id' => $vente->id, 'client_nom' => $vente->client_nom,
+                          'client_telephone' => $vente->client_telephone,
+                          'client_quartier' => $vente->client_quartier] as $col => $val) {
+                    if (Schema::hasColumn('livraisons', $col)) {
+                        $livData[$col] = $val;
+                    }
+                }
+                $livraison = Livraison::create($livData);
+
+                if (Schema::hasTable('livraison_produits')) {
+                    foreach ($lignes as $l) {
+                        LivraisonProduit::create([
+                            'livraison_id' => $livraison->id,
+                            'produit_id'   => $l['p']->id,
+                            'quantite'     => $l['qte'],
+                        ]);
+                    }
+                }
+
+                return ['vente' => $vente, 'livraison' => $livraison, 'montant' => $montant];
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        // Géocodage du quartier pour l'assignation au livreur le plus proche — jamais bloquant
+        try {
+            $liv     = $resultat['livraison'];
+            $adresse = $resultat['vente']->client_quartier ?? $resultat['vente']->zone_livraison;
+            if ($adresse && Schema::hasColumn('livraisons', 'client_latitude')) {
+                $coords = (new GeocodingService())->geocode($adresse);
+                if ($coords) {
+                    $liv->update(['client_latitude' => $coords['lat'], 'client_longitude' => $coords['lng']]);
+                }
+            }
+        } catch (\Throwable $e) {
+            // on ignore : la commande est déjà enregistrée
         }
 
         return response()->json([
-            'message'    => 'Commande passée avec succès !',
-            'vente_id'   => $vente->id,
-            'montant'    => $montantTotal,
-            'vendeur'    => $vendeur->nom_boutique ?? $vendeur->name,
+            'message' => 'Commande passée avec succès !',
+            'numero'  => $resultat['vente']->id,
+            'montant' => $resultat['montant'],
+            'vendeur' => $vendeur->nom_boutique ?? $vendeur->name,
         ], 201);
     }
 
-    // ── Stats de la boutique du vendeur ──
+    // ── Stats de la boutique du vendeur (commandes passées via sa page publique) ──
     public function mesBoutiqueStats(Request $request)
     {
         $user = $request->user();
 
         $ventes = Vente::where('caissiere_id', $user->id)
-            ->whereNotNull('client_nom')
+            ->where('notes', 'like', self::MARQUE_NOTES . '%')
             ->get();
+
+        $aujourdhui = today()->toDateString();
 
         return response()->json([
             'code_boutique'  => $user->code_boutique,
             'lien'           => config('app.url') . '/boutique/' . $user->code_boutique,
             'nb_commandes'   => $ventes->count(),
             'ca_total'       => $ventes->sum('montant_total'),
-            'ca_aujourd_hui' => $ventes->filter(fn($v) => $v->date_vente === today()->toDateString())->sum('montant_total'),
+            'ca_aujourd_hui' => $ventes
+                ->filter(fn($v) => substr((string) $v->date_vente, 0, 10) === $aujourdhui)
+                ->sum('montant_total'),
         ]);
     }
 }
