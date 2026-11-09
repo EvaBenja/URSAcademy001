@@ -134,9 +134,17 @@ class ProduitController extends Controller
 
         $produit = Produit::findOrFail($id);
 
-        // Vérifier si le produit a des ventes liées
-        $nbVentes = \Illuminate\Support\Facades\DB::table('vente_items')
-            ->where('produit_id', $id)->count();
+        // Compter TOUTES les données rattachées à ce produit. Dans la base, supprimer
+        // un produit entraîne la suppression en cascade de ses ventes, commissions,
+        // lignes de vente/livraison et mouvements de stock : on ne supprime donc
+        // jamais un produit qui a le moindre historique.
+        $nbVentes = 0;
+        foreach (['ventes', 'vente_items', 'commissions', 'livraison_produits', 'repartitions', 'mouvements_stock'] as $table) {
+            if (\Illuminate\Support\Facades\Schema::hasTable($table)
+                && \Illuminate\Support\Facades\Schema::hasColumn($table, 'produit_id')) {
+                $nbVentes += \Illuminate\Support\Facades\DB::table($table)->where('produit_id', $id)->count();
+            }
+        }
 
         if ($nbVentes > 0) {
             // Produit lié à des ventes — désactiver au lieu de supprimer
@@ -147,7 +155,7 @@ class ProduitController extends Controller
                 'nom'             => '[Archivé] ' . $nomPropre,
             ]);
             return response()->json([
-                'message' => 'Produit archivé (lié à ' . $nbVentes . ' vente(s) — données préservées)'
+                'message' => 'Produit archivé (' . $nbVentes . ' enregistrement(s) liés — historique préservé, rien n\'a été supprimé)'
             ]);
         }
 
