@@ -180,6 +180,39 @@ class ShopifyController extends Controller
     }
 
     // ── Créer une vente depuis une commande Shopify confirmée ──
+    /**
+     * Produit technique rattaché aux commandes Shopify qui ne correspondent à aucun produit du catalogue.
+     * Il reprend les paramètres financiers (commissions, répartition) du produit utilisé jusqu'ici par défaut,
+     * pour que les commissions restent identiques — mais il est indépendant : archiver ou modifier un vrai
+     * produit n'a plus d'effet sur les ventes Shopify. Le nom affiché reste le vrai nom Shopify (voir Vente).
+     */
+    private function produitSystemeShopify(): ?int
+    {
+        $ref = 'SHOPIFY-SYSTEME';
+        try {
+            $existant = \App\Models\Produit::where('reference', $ref)->first();
+            if ($existant) {
+                return $existant->id;
+            }
+            $modele = \App\Models\Produit::orderBy('id')->first();
+            if (!$modele) {
+                return null;
+            }
+            $copie = $modele->replicate();
+            $copie->reference = $ref;
+            $copie->nom = 'Commande Shopify (système)';
+            $copie->quantite_stock = 0;
+            if (array_key_exists('actif', $copie->getAttributes())) {
+                $copie->actif = false;
+            }
+            $copie->save();
+            return $copie->id;
+        } catch (\Throwable $e) {
+            // Jamais bloquant : on retombe sur l'ancien comportement plutôt que d'empêcher la commande
+            return \App\Models\Produit::orderBy('id')->value('id');
+        }
+    }
+
     private function creerVenteDepuisCommande(CommandeClosing $commande, Request $request): Vente
     {
         // produit_id obligatoire en base — utiliser le premier produit de la commande ou un produit par défaut
@@ -187,10 +220,14 @@ class ShopifyController extends Controller
         $produitId = null;
         if (!empty($produits)) {
             $premier = is_array($produits[0]) ? $produits[0] : (array)$produits[0];
-            $produitId = \App\Models\Produit::where('nom', 'like', '%'.($premier['nom'] ?? '').'%')->value('id');
+            $nomShopify = trim((string) ($premier['nom'] ?? ''));
+            if ($nomShopify !== '') {
+                $produitId = \App\Models\Produit::where('nom', 'not like', '[Archivé]%')
+                    ->where('nom', 'like', '%'.$nomShopify.'%')->value('id');
+            }
         }
         if (!$produitId) {
-            $produitId = \App\Models\Produit::first()?->id;
+            $produitId = $this->produitSystemeShopify();
         }
 
         // Construire le résumé des produits Shopify

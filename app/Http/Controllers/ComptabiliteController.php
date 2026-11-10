@@ -57,7 +57,7 @@ class ComptabiliteController extends Controller
                         ];
                     })->values()
                     : collect([[
-                        'nom'        => $vente->produit->nom ?? 'Produit supprimé',
+                        'nom'        => $vente->nom_produit_affiche ?? 'Produit supprimé',
                         'couleur'    => null,
                         'quantite'   => $vente->quantite,
                         'prix'       => (float) $vente->prix_vendeur,
@@ -139,7 +139,7 @@ class ComptabiliteController extends Controller
                             'remise' => (float) $i->remise,
                             'sous_total' => (float) $i->sous_total,
                         ])->values()
-                        : collect([['nom' => $vente->produit->nom ?? '—', 'couleur' => null, 'quantite' => $vente->quantite, 'prix' => (float) $vente->prix_vendeur, 'remise' => (float) $vente->remise, 'sous_total' => (float) $vente->montant_total]]);
+                        : collect([['nom' => $vente->nom_produit_affiche ?? '—', 'couleur' => null, 'quantite' => $vente->quantite, 'prix' => (float) $vente->prix_vendeur, 'remise' => (float) $vente->remise, 'sous_total' => (float) $vente->montant_total]]);
 
                     return [
                         'id' => $vente->id, 'heure' => $vente->created_at->format('H:i'),

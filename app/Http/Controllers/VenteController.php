@@ -271,7 +271,7 @@ class VenteController extends Controller
             foreach ($vente->items as $item) {
                 Produit::where('id', $item->produit_id)->increment('quantite_stock', $item->quantite);
             }
-        } else {
+        } elseif (!$vente->estShopify()) { // une commande Shopify n'a jamais déduit de stock : rien à restituer
             Produit::where('id', $vente->produit_id)->increment('quantite_stock', $vente->quantite);
         }
 
@@ -333,7 +333,7 @@ class VenteController extends Controller
 
                 $produits = $v->items->isNotEmpty()
                     ? $v->items->map(fn($i) => ($i->produit->nom ?? '?').' x'.($i->quantite ?? 1).' ('.number_format($i->sous_total ?? 0, 0, ',', ' ').' FCFA)')->implode(' | ')
-                    : (($v->produit->nom ?? '?').' x'.($v->quantite ?? 1));
+                    : (($v->nom_produit_affiche ?? '?').' x'.($v->quantite ?? 1));
 
                 fputcsv($fp, [
                     $v->id,
@@ -383,7 +383,7 @@ class VenteController extends Controller
             foreach ($vente->items as $item) {
                 Produit::where('id', $item->produit_id)->increment('quantite_stock', $item->quantite);
             }
-        } elseif ($vente->produit_id) {
+        } elseif ($vente->produit_id && !$vente->estShopify()) {
             Produit::where('id', $vente->produit_id)->increment('quantite_stock', $vente->quantite ?? 1);
         }
 
